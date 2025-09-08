@@ -1,0 +1,42 @@
+[
+  {
+    "fecha": "2025-07-18",
+    "monto": 45,
+    "categoria": "Seguro carro",
+    "subcategoria": "",
+    "medio": "Tarjeta",
+    "banco": "",
+    "persona": "Adri",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-06-12",
+    "monto": 450,
+    "categoria": "Alquiler",
+    "subcategoria": "",
+    "medio": "Zelle",
+    "banco": "Chase",
+    "persona": "Adri",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-05-20",
+    "monto": 78,
+    "categoria": "Mensualidad carro",
+    "subcategoria": "",
+    "medio": "Zelle",
+    "banco": "Chase",
+    "persona": "Adri",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-04",
+    "monto": 12,
+    "categoria": "Mensualidad carro",
+    "subcategoria": "",
+    "medio": "Trueque",
+    "banco": "",
+    "persona": "Adri",
+    "nota": ""
+  }
+]

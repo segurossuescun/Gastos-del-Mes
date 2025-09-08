@@ -1,0 +1,1917 @@
+/* ================================
+   FUENTES
+================================ */
+@font-face {
+  font-family: "Gochi Hand";
+  src: url("/static/Gochi_Hand/GochiHand-Regular.woff2") format("woff2"),
+       url("/static/Gochi_Hand/GochiHand-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cookie";
+  src: url("/static/Cookie/Cookie-Regular.woff2") format("woff2"),
+       url("/static/Cookie/Cookie-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Boogaloo";
+  src: url("/static/Boogaloo/Boogaloo-Regular.woff2") format("woff2"),
+       url("/static/Boogaloo/Boogaloo-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bad Script";
+  src: url("/static/Bad_Script/BadScript-Regular.woff2") format("woff2"),
+       url("/static/Bad_Script/BadScript-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+:root {
+  --color-fondo: #f9f9f9;
+  --color-texto: #553071;
+
+  /* Fuentes */
+  --fuente-titulo: 'Gochi Hand', cursive;
+  --fuente-secundaria: Arial, sans-serif;
+}
+
+/* ================================
+   GENERALES
+================================ */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+   font-family: var(--fuente-secundaria);
+  font-size: 16px;
+}
+
+main {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+h2, .titulo {
+  margin: 0.5em 0;
+  text-align: center;
+  font-size: 2rem; /* o 32px */
+}
+body.fuente-personalizada * {
+  font-family: var(--fuente-cuerpo);
+}
+
+/* ================================
+   VISTAS Y FONDOS
+================================ */
+.vista {
+  display: none;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: calc(100vh - 150px);
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 20px;
+  box-sizing: border-box;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+.vista .tarjeta-resumen,
+.vista .lista {
+  background: rgba(255,255,255,0.9);
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 0 4px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 100%;
+}
+
+.vista::after {
+  content: "";
+  flex: 1;
+  min-height: 400px;
+  background: transparent;
+  background-size: contain;
+  opacity: 0.08;
+}
+.menu-lateral button {
+  font-size: 1.3rem; /* ~17-18px */
+  padding: 10px 20px;
+  border-radius: 8px;
+  min-width: 100px;
+}
+/* Menú lateral */
+#menu-vistas,
+.menu-lateral {
+  display: flex;
+  justify-content: center; /* centra horizontalmente */
+  align-items: center;      /* centra verticalmente en su altura */
+  flex-wrap: wrap;          /* permite que salten a la siguiente línea en pantallas pequeñas */
+  gap: 10px;                /* espacio entre los botones */
+  margin-top: 10px;
+}
+
+/* Botones del menú */
+.menu-lateral button {
+  font-size: 1.3rem;
+  padding: 10px 20px;
+  border-radius: 8px;
+  min-width: 100px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+/* ================================
+   FORMULARIOS Y CONTENIDOS
+================================ */
+form, .formulario, .form-section, #seccion-usuario .form-container {
+  width: 100%;
+  max-width: 600px;
+  margin: 20px auto;
+  display: flex;
+  flex-direction: column;
+}
+
+form label {
+  font-family: 'Boogaloo', cursive;
+  font-size: 1.3em;
+  color: #42187e;
+  font-weight: bold;
+  margin-top: 12px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+form input,
+form select,
+form textarea {
+  font-size: 1rem; /* 16px */
+  padding: 10px 12px;
+  height: auto;
+  min-height: 36px;
+  line-height: 1.4;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+form input:focus, form select:focus {
+  outline: none;
+  border: 2px solid #6d4b96;
+  box-shadow: 0 0 5px #6d4b96;
+}
+
+form input:hover, form select:hover {
+  border-color: #6d4b96;
+}
+
+button {
+  font-family: 'Boogaloo', cursive;
+  font-size: 16px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 10px;
+  color: white;
+}
+
+form button, 
+.formulario button {
+  display: block;
+  margin: 15px auto; /* centrado y con espacio */
+  width: fit-content; /* sólo lo necesario */
+  min-width: 160px; /* para que no se encoja demasiado */
+  max-width: 300px; /* opcional */
+  font-size: 1.3rem; /* más grande */
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: 'Boogaloo', cursive;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+/* ================================
+   FILTROS ARREGLADOS (FINAL)
+================================ */
+/* Contenedor general de los filtros */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center; /* centra el grupo */
+  gap: 12px; /* espacio entre los contenedores */
+  padding: 10px 0;
+  max-width: 900px;
+  margin: 0 auto; /* centrado horizontal */
+  box-sizing: border-box;
+}
+/* Label */
+.filtros label {
+  font-weight: bold;
+  color: #42187e;
+  margin-bottom: 4px;
+}
+/* Inputs y selects */
+.filtros input,
+.filtros select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+.filtros h3 {
+  flex: 0 0 100%;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 1.8rem; /* más grande solo para el título */
+}
+
+/* ================================
+   BARRA USUSARIO LOGUEADO
+================================ */
+.barra-superior {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40px;
+  background: linear-gradient(90deg, #fce4ec, #f3e5f5);
+  color: #553071;
+  font-size: 0.9rem;
+  z-index: 1000;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+
+  display: flex;
+  justify-content: center; /* centrados */
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  line-height: 1; /* espacio entre bienvenida y botón */
+}
+
+.bienvenida {
+  display: flex;
+  align-items: center;
+}
+
+#cerrar-sesion-barra {
+  display: flex;
+  align-items: center;
+  height: 24px; /* o el mismo que el de .bienvenida si quieres */
+  margin: 0;
+  padding: 2px 6px;
+  line-height: 1;
+  font-size: 1rem;
+}
+
+#cerrar-sesion-barra:hover {
+  background: #edb0f7;
+}
+
+/* Para que el contenido no se suba */
+#contenido-app {
+  margin-top: 40px;
+}
+/* 1) PERFIL — usa mismo look de botones de acciones (azul) */
+.card-datos .card-actions button,
+.bill-actions button,
+#modal-perfil .modal-buttons button {
+  background: linear-gradient(to right, #2b97fa, #01c4e7);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.card-datos .card-actions button:hover,
+.bill-actions button:hover,
+#modal-perfil .modal-buttons button:hover {
+  background: linear-gradient(to right, #9a27f7, #6664ff);
+}
+
+/* 2) PERFIL — título igual al resto de modales bonitos */
+#modal-perfil .modal-content h3 {
+  font-family: 'Gochi Hand', cursive;
+  font-size: 20px;
+  color: #553071;
+  margin: 0 0 8px 0;
+}
+
+/* 3) PERFIL — contenedor más angosto */
+#modal-perfil .modal-content {
+  max-width: 360px;   /* más compacto */
+  width: 92%;
+  padding: 14px;
+}
+
+/* 4) BARRA SUPERIOR — tamaño/alineación de Perfil y Config como el de Salir */
+.barra-superior .btn-perfil,
+.barra-superior .btn-config {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin: 0;
+  padding: 2px 6px;
+  line-height: 1;
+  font-size: 1rem;
+}
+
+/* (opcional) mismo hover suave que "Salir" */
+.barra-superior .btn-perfil:hover,
+.barra-superior .btn-config:hover {
+  background: #edb0f7;
+}
+#modal-perfil {
+  position: fixed;
+  inset: 0;
+  display: none;                 /* oculto por defecto */
+  justify-content: center;
+  align-items: center;
+  background: rgba(0,0,0,.4);
+  z-index: 99999;                /* bien arriba */
+}
+
+/* al abrir, se muestra */
+#modal-perfil.abierto {
+  display: flex !important;      /* por si hay .modal {display:none} global */
+}
+/* Botón teléfono en la barra (mismo look & feel) */
+.barra-superior .btn-telefono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-width: 28px;
+  padding: 2px 6px;
+  margin: 0;
+  line-height: 1;
+  font-size: 1rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #553071;
+  cursor: pointer;
+}
+
+.barra-superior .btn-telefono:hover {
+  background: #edb0f7; /* mismo hover suave que cerrar-sesion */
+}
+
+/* Wrapper para posicionar el popover */
+.telefono-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  overflow: visible; 
+}
+
+/* Popover */
+.popover-telefono {
+  position: absolute;
+  top: 120%;
+  right: 0;
+  left: auto;
+  max-width: 220px;
+  white-space: normal;
+  min-width: 130px;
+  padding: 8px 8px;
+  background: #fff;
+  border: 1px solid #e0c8f0;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  z-index: 10001;
+  display: none;
+  font-family: 'Boogaloo', cursive;
+  color: #42187e;
+}
+
+.popover-telefono.open { display: block; }
+
+/* flechita */
+.popover-telefono::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 10px; height: 10px;
+  background: #fff;
+  border-left: 1px solid #e0c8f0;
+  border-top: 1px solid #e0c8f0;
+  transform: rotate(45deg);
+}
+
+/* Texto interno */
+.popover-telefono .tel-label {
+  font-size: 0.85rem;
+  color: #6d4b96;
+  margin-bottom: 4px;
+  opacity: .9;
+}
+
+#telefono-dueno-pop {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #553071;
+  word-break: break-word;
+}
+
+/* ================================
+   HEADER
+================================ */
+/* Oculto el header por defecto */
+.encabezado { display: none; }
+/* Tras login (cuando el body tenga .auth) se muestra */
+body.auth .encabezado { display: block; }
+
+header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+header .encabezado-app {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap; /* para que en móvil se acomode */
+}
+
+.logo-principal,
+.logo-izquierda {
+  width: 150px;
+  max-height: 120px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 5px #9a27f7); /* 💜 sombra morada como en el splash */
+}
+
+.encabezado-app .titulo {
+  font-size: 2.8rem; /* bien grande */
+  font-weight: bold;
+}
+
+h1, h2, h3 {
+  font-size: 1.6rem; /* tamaño estándar para los otros títulos */
+  font-weight: bold;
+}
+
+@media (max-width: 600px) {
+  .encabezado-app {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .titulo {
+    font-size: 2rem; /* un poquito más chico en móvil para que se vea bonito */
+  }
+}
+
+/* ============================
+   SPLASH animado con rebote
+============================ */
+/* ——— Splash tapa todo con fondo sólido ——— */
+#splash{
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 99999;
+  background: var(--splash-bg, #fff);
+  opacity: 1;
+  transition: opacity .35s ease;
+}
+
+/* estado “oculto” (lo aplica JS al final) */
+#splash.is-hidden{
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ——— Logo: rebote + brillo morado ——— */
+#splash img{
+  width: 180px;
+  /* rebote al entrar (quedando en su estado final) */
+  animation:
+    splashPop 900ms cubic-bezier(.2,.8,.2,1) 120ms both,
+    glowPulse 1600ms ease-in-out 120ms infinite;
+  /* sombra morada “real” (dos drop-shadows para profundidad) */
+  filter:
+    drop-shadow(0 8px 18px rgba(154, 39, 247, .35))
+    drop-shadow(0 0 8px rgba(154, 39, 247, .45));
+  will-change: transform, filter;
+}
+
+/* Rebote (scale > 1 y vuelve) */
+@keyframes splashPop{
+  0%   { transform: scale(.70); opacity: 0; }
+  55%  { transform: scale(1.10); opacity: 1; }
+  100% { transform: scale(1.00); opacity: 1; }
+}
+
+/* Brillo morado respirando (sutil) */
+@keyframes glowPulse{
+  0%, 100% {
+    filter:
+      drop-shadow(0 8px 18px rgba(154,39,247,.35))
+      drop-shadow(0 0 8px rgba(154,39,247,.45));
+  }
+  50% {
+    filter:
+      drop-shadow(0 10px 22px rgba(154,39,247,.50))
+      drop-shadow(0 0 12px rgba(154,39,247,.65));
+  }
+}
+
+/* mientras carga, oculta el contenido */
+body.is-loading #contenido-app{ visibility:hidden; opacity:0; }
+
+/* al terminar el splash, muéstralo suave */
+body:not(.is-loading) #contenido-app{
+  visibility:visible; opacity:1; transition:opacity .25s ease;
+}
+
+/* (opcional) respeta accesibilidad: sin animaciones si el SO lo pide */
+@media (prefers-reduced-motion: reduce){
+  #splash img{ animation: none; }
+}
+/* animaciones del logo (la clase que pones en startSplashAnim) */
+#splash img.splash-anim{
+  animation: splashPop 900ms cubic-bezier(.2,.8,.2,1) 120ms both,
+             glowPulse 1600ms ease-in-out 120ms infinite;
+  filter: drop-shadow(0 0 5px #9a27f7);
+  will-change: transform, filter;
+  transform-origin: center center;
+}
+
+/* Plan B: animar el contenedor si no hay <img> */
+#splash.splash-anim {
+  animation:
+    splashPop 900ms cubic-bezier(.2,.8,.2,1) 120ms both,
+    glowPulse 1600ms ease-in-out 120ms infinite;
+}
+/* cuando ocultás */
+#splash.splash-hide{ opacity:0; pointer-events:none; }
+/* ================================
+   Graficos
+================================ */
+.grafico-contenedor.flotante {
+  position: fixed;
+  top: 40px;
+  left: 20px;
+  max-width: 280px;
+  padding: 15px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 100;
+  text-align: center;
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.9em;
+  animation: aparecer 0.6s ease-out forwards;
+  opacity: 0;
+  transform: translateY(-20px);
+}
+.grafico-contenedor {
+  text-align: center;
+  margin-top: 15px;
+  margin-bottom: 20px;
+}
+
+.grafico-contenedor canvas {
+  width: 300px !important;
+  height: 300px !important;
+  display: block;
+  margin: 0 auto;
+}
+
+
+.grafico-contenedor .resumen-mensual {
+  margin-top: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, #9ef5c6, #fff);
+  border-radius: 12px;
+  display: inline-block;
+  text-align: left;
+  font-size: 1rem;
+  font-family: 'Boogaloo', cursive;
+  color: #42187e;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+#grafico-pagos {
+  width: 400px;
+  height: 400px;
+  margin: 0 auto;
+  display: block;
+}
+
+.grafico-contenedor .resumen-mensual h3 {
+  margin-top: 0;
+  font-size: 1.2rem;
+}
+.grafico-contenedor .resumen-mensual select {
+  margin: 5px 0;
+  font-size: 0.9rem;
+}
+
+@keyframes aparecer {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.grafico-contenedor canvas {
+  width: 250px !important;
+  height: 250px !important;
+}
+
+@media (max-width: 768px) {
+  .grafico-contenedor.flotante {
+    position: static;
+    margin: 20px auto;
+    width: 90%;
+    max-width: 320px;
+  }
+}
+.tarjeta-resumen-verde {
+  position: fixed;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  z-index: 50;
+
+  background: linear-gradient(180deg, #9ef5c6, #6ed29d);
+  color: #42187e;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  text-align: center;
+  font-family: 'Boogaloo', cursive;
+  max-width: 250px;
+}
+
+/* ================================
+   LOGIN Y REGISTRO DE USUARIOS
+================================ */
+
+#usuario {
+  position: relative;
+  min-height: calc(100vh - 200px); /* ajusta 200px si tienes header arriba */
+}
+
+#seccion-usuario {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+#seccion-registro,
+#seccion-login {
+  max-width: 350px;
+  min-width: 280px;
+  text-align: center;
+}
+
+#usuario h3 {
+  font-family: 'Cookie', cursive;
+  font-size: 60px;
+  color: #553071;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+#usuario h4 {
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  color: #8b68b0;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  text-align: center;
+  position: relative;
+}
+
+#usuario h4::before {
+  content: "✨ ";
+  font-size: 18px;
+}
+
+#usuario label {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+#usuario small {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  color: #553071;
+  display: block;
+  margin-top: 4px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+#seccion-registro form,
+#seccion-login form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#seccion-registro form input,
+#seccion-login form input,
+#seccion-registro form select,
+#seccion-login form select,
+#seccion-registro form button,
+#seccion-login form button {
+  font-family: Arial, sans-serif;
+  margin: 5px 0;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+#seccion-usuario .input-con-ojo {
+  position: relative;
+  width: 100%;
+}
+
+#seccion-usuario .input-con-ojo input {
+  padding-right: 40px;
+}
+
+#seccion-usuario .boton-ojo {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+/* Correo */
+.correo-container {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.correo-container input,
+.correo-container select {
+  padding: 8px;
+  font-size: 14px;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  transition: all 0.2s ease-in-out;
+}
+
+.correo-container input {
+  flex: 2;
+}
+
+.correo-container select {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Efectos focus/hover */
+.correo-container input:focus,
+.correo-container select:focus {
+  border-color: #8b68b0;
+  box-shadow: 0 0 5px rgba(139, 104, 176, 0.4);
+  outline: none;
+}
+
+.correo-container input:hover,
+.correo-container select:hover {
+  border-color: #a88ac3;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border: 2px solid #6d4b96;
+  box-shadow: 0 0 5px #6d4b96;
+}
+
+input:hover,
+select:hover {
+  border-color: #6d4b96;
+}
+
+.swal2-popup .swal2-html-container,
+.swal2-popup .swal2-title {
+  font-family: Arial, sans-serif !important;
+  font-size: 12px !important;
+}
+
+/* ================================
+   CONFIGURACIÓN (MODAL)
+================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: #fff;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* 👈 alinea todo a la izquierda */
+  gap: 8px;
+}
+
+.modal-content label {
+  display: block;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: #42187e;
+  opacity: 0.9;
+}
+
+#modal-configuracion {
+  font-size: 13px;
+  color: #333;
+  display: none;
+}
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fuente-item {
+  animation: aparecer 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#opciones-especificas > div {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ================================
+   Botones e Inputs pequeños
+================================ */
+
+#modal-configuracion .boton-pequeno {
+  height: 22px;
+  width: 22px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.boton-pequeno:hover {
+  opacity: 0.9;
+}
+
+#modal-configuracion button {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  padding: 5px 10px;
+  margin: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#modal-configuracion .input-pequeno {
+  height: 26px;
+  font-size: 12px;
+  padding: 0px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: auto;
+  flex: unset;
+  max-width: 150px;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: #553071;
+  box-shadow: 0 0 5px #553071;
+}
+
+input:hover, select:hover {
+  border-color: #6d4b96;
+}
+.config-item.fila-con-boton {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.config-item.fila-con-boton input {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-item.fila-con-boton .boton-pequeno {
+  flex: 0 0 24px; /* mismo tamaño siempre */
+  height: 24px;
+  width: 24px;
+}
+.config-item-con-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-item-con-lista > input {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+.config-item-con-lista > button {
+  flex: 0 0 auto;
+  height: 28px;
+  width: 28px;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#lista-ingresos-fuentes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+  width: 100%;
+}
+.subcategoria-input {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.subcategorias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.chips-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.chips-wrapper .fuente-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* Color morado para todos los checkboxes seleccionados */
+#vistas-opciones input[type="checkbox"]:checked,
+#lista-bills input[type="checkbox"]:checked,
+#lista-bills-config input[type="checkbox"]:checked,
+#lista-bills-pagos input[type="checkbox"]:checked,
+#lista-personas-pagos input[type="checkbox"]:checked,
+#lista-medios-pago-pagos input[type="checkbox"]:checked {
+  accent-color: #8b68b0; /* cambia el color del check */
+}
+
+/* ================================
+   CONTENEDORES DE CHIPS
+================================ */
+#lista-ingresos-fuentes,
+#lista-personas,
+#lista-bills-config,
+#lista-categorias-egreso,
+#lista-medios-pago {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px;
+  background: #fff;
+  align-items: flex-start;
+  min-height: auto;      /* 👈 elimina la altura fija */
+  max-width: 250px;       /* 👈 opcional: para que no sean gigantes */
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;              /* 👈 asegura que no tenga márgenes raros */
+}
+
+/* ================================
+   CHIP (fuente-item)
+================================ */
+#lista-ingresos-fuentes .fuente-item,
+#lista-personas .fuente-item,
+#lista-bills .fuente-item,
+#lista-categorias-egreso .fuente-item,
+#lista-medios-pago .fuente-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  border-radius: 4px;
+  padding: 0 6px;
+  margin: 2px;
+  font-size: 13px;
+  font-family: Arial, sans-serif;
+  line-height: 1;
+  color: #333;
+  height: 26px;               /* un poco más alto */
+  min-width: 26px;           /* ancho mínimo */
+}
+
+#lista-ingresos-fuentes .fuente-item span,
+#lista-personas .fuente-item span,
+#lista-bills .fuente-item span,
+#lista-categorias-egreso .fuente-item span,
+#lista-medios-pago .fuente-item span {
+  line-height: 1;
+}
+
+#lista-ingresos-fuentes .fuente-item button,
+#lista-personas .fuente-item button,
+#lista-bills .fuente-item button,
+#lista-categorias-egreso .fuente-item button,
+#lista-medios-pago .fuente-item button {
+  background: none;
+  border: none;
+  color: #c00;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 4px;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 18px;
+}
+
+#lista-ingresos-fuentes .fuente-item button:hover,
+#lista-personas .fuente-item button:hover,
+#lista-bills .fuente-item button:hover,
+#lista-categorias-egreso .fuente-item button:hover,
+#lista-medios-pago .fuente-item button:hover {
+  color: #e74c3c;
+}
+
+input[type="checkbox"] {
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+/* ✅ Corrección + Animación para checkboxes en Bills y Pagos */
+/* TODOS con checkbox y mismo estilo */
+
+/* Animación */
+@keyframes popcito {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1.05);
+  }
+}
+
+/* Estilo de contenedor */
+#lista-bills-pagos,
+#lista-personas-pagos,
+#lista-medios-pago-pagos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border: 1px solid #ddd;
+  padding: 4px;
+  border-radius: 4px;
+  min-height: 30px;
+}
+#modal-configuracion #lista-bills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;                /* más espacio entre bills */
+  align-items: flex-start;
+  width: auto;              /* se ajusta al contenido */
+  max-width: 100%;          /* no se sale del modal */
+  box-sizing: border-box;
+}
+
+/* ================================
+   PAREJA FELIZ: label + input juntos
+================================ */
+
+.config-item.pareja {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin: 0;
+    border: 1px solid #ccc;
+    padding: 0;
+    border-radius: 4px;
+    background: #fff;
+    max-width: 250px; /* para probar */
+    width: 100%;
+}
+
+.config-item.pareja label {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 100px;
+  white-space: nowrap;
+  margin: 0;
+  font-size: 12px;
+  color: #42187e;
+  text-align: left; /* 👈 alineado a la izquierda */
+}
+
+#modal-configuracion .modal-content .config-item.pareja input[type="color"],
+#modal-configuracion .modal-content .config-item.pareja select {
+  flex: 0 0 auto !important;
+  width: 30px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  border: none !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  margin-left: 0 !important;
+}
+
+.config-item.pareja input[type="color"] {
+  width: 30px;
+  height: 20px;
+  border: none;
+  padding: 0;
+}
+
+.config-item.pareja select {
+  width: max-content;
+  min-width: 120px;
+  height: 22px;
+  font-size: 12px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+#modal-configuracion .config-item.logo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+  max-width: 250px; /* opcional */
+  width: 100%;
+}
+
+#modal-configuracion .config-item.logo label {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
+#modal-configuracion .config-item.logo input {
+  flex: 1 1 auto;
+  max-width: calc(100% - 50px); /* opcional */
+}
+#modal-configuracion .config-item.vistas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+  max-width: 250px;
+  width: 100%;
+}
+
+#modal-configuracion .config-item.vistas > h3 {
+   margin: 0;
+  font-size: 12px;
+  text-align: left; /* o center si prefieres */
+  color: #42187e;
+}
+
+#modal-configuracion .config-item.vistas > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#modal-configuracion .config-item.vistas .vistas-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start; /* o center */
+  gap: 4px;
+}
+
+#modal-configuracion .config-item.vistas .vistas-opciones label {
+  flex: 0 0 calc(33.33% - 4px); /* 3 por fila */
+  white-space: nowrap;
+  font-size: 12px;
+  text-align: left;
+}
+/* ================================
+   Config item (general)
+================================ */
+
+.config-item {
+  border: 1px solid #ccc;
+  padding: 4px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+  background: #fff;
+}
+
+/* ================================
+   Vistas Opciones
+================================ */
+/* Checkboxes en general */
+#vistas-opciones input[type="checkbox"],
+#lista-bills input[type="checkbox"],
+#lista-bills-pagos input[type="checkbox"],
+#lista-personas-pagos input[type="checkbox"],
+#lista-medios-pago-pagos input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0 4px;
+  transform: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  accent-color: currentColor; /* hereda el color asignado más abajo */
+}
+
+/* Colores específicos */
+#vistas-opciones input[type="checkbox"] {
+  accent-color: #8b68b0;
+}
+#lista-bills input[type="checkbox"] {
+  accent-color: #553071;
+}
+#lista-bills-pagos input[type="checkbox"] {
+  accent-color: #2b97fa;
+}
+#lista-personas-pagos input[type="checkbox"] {
+  accent-color: #e67e22;
+}
+#lista-medios-pago-pagos input[type="checkbox"] {
+  accent-color: #27ae60;
+}
+
+/* Animación común */
+@keyframes popcito {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1.05); }
+}
+
+#vistas-opciones input[type="checkbox"]:checked,
+#lista-bills input[type="checkbox"]:checked,
+#lista-bills-pagos input[type="checkbox"]:checked,
+#lista-personas-pagos input[type="checkbox"]:checked,
+#lista-medios-pago-pagos input[type="checkbox"]:checked {
+  animation: popcito 0.3s ease forwards;
+}
+
+/* ================================  
+   TARJETA RESUMEN FLOTANTE  
+================================ */
+/* Tarjeta resumen flotante en escritorio */
+.tarjeta-resumen.flotante {
+  position: fixed;
+  top: 50px;
+  right: 10px;
+  font-size: 1.3rem;
+  opacity: 0.95;
+  z-index: 100;
+  max-width: 280px;
+  padding: 15px;
+  color: #333;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-align: left;
+  font-family: 'Boogaloo', cursive !important;
+  font-weight: normal !important;
+}
+.tarjeta-resumen.flotante strong,
+.tarjeta-resumen.flotante {
+  font-family: 'Boogaloo', cursive !important;
+  font-weight: normal !important;
+  color: #42187e !important;
+  font-size: 1.3rem;
+}
+
+/* En móviles (pantallas ≤768px), se centra abajo y no flota */
+@media (max-width: 768px) {
+  .tarjeta-resumen.flotante {
+    position: static;
+    margin: 10px auto;
+    display: block;
+    text-align: center;
+    font-size: 1rem;
+  }
+}
+
+.resumen-mensual {
+  max-width: 300px;
+  padding: 15px;
+  margin: 20px auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-family: 'Boogaloo', cursive;
+  color: #42187e;
+  text-align: center;
+}
+
+.resumen-mensual h3 {
+  margin-bottom: 10px;
+  font-size: 1.2em;
+}
+
+#selector-mes {
+  margin-bottom: 10px;
+  padding: 5px;
+  border-radius: 4px;
+}
+.resumen-mensual select {
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  max-width: 150px;
+}
+.resumen-mensual {
+  font-size: 1rem;
+}
+
+.resumen-mensual #detalle-resumen {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+#tarjeta-resumen-verde {
+  display: none;
+  font-size: 1.4rem;
+}
+
+#tarjeta-resumen-verde h3 {
+  font-size: 1.6rem;
+}
+
+#tarjeta-resumen-verde #info-resumen {
+  font-size: 1.3rem;
+}
+
+
+/* ================================
+   MEDIA QUERIES para móviles
+   (pantallas ≤600px)
+================================ */
+@media (max-width: 600px) {
+  /* Las vistas un poco más compactas */
+  .vista {
+    min-height: auto;
+    padding: 20px 10px;
+  }
+
+  /* La tarjeta resumen deja de flotar y se centra */
+  .tarjeta-resumen.flotante {
+    position: static;
+    margin: 10px auto;
+  }
+
+  /* Menú lateral más bonito y ordenado */
+  .menu-lateral {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px; /* espaciado entre botones del menú */
+  }
+
+  /* Header en columna para que quepa bien */
+  header {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 🌟 Filtros con espacio y orden */
+  #filtros-ingresos,
+  #filtros-egresos,
+  #filtros-bills,
+  #filtros-pagos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* espacio entre los elementos */
+    margin-top: 15px;
+    margin-bottom: 15px;
+  }
+
+  /* Labels de filtros con margen inferior */
+  #filtros-ingresos label,
+  #filtros-egresos label,
+  #filtros-bills label,
+  #filtros-pagos label {
+    margin-bottom: 3px;
+  }
+
+  /* 🌟 Gráficos con espacio extra para que no se metan entre filtros y listas */
+  .grafico-contenedor {
+    margin-top: 15px;
+    margin-bottom: 20px;
+  }
+
+  /* Tarjetas de datos con un poquito de aire abajo */
+  .card-datos,
+  .bill-card {
+    margin-bottom: 10px;
+  }
+}
+@media (max-width: 600px) {
+  /* … todo lo que ya tienes … */
+
+  /* Ajustes para login y registro */
+  #usuario h3 {
+    font-size: 40px;
+  }
+
+  #usuario h4 {
+    font-size: 18px;
+  }
+
+  .correo-container {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .correo-container input,
+  .correo-container select {
+    width: 100%;
+  }
+
+  #seccion-registro,
+  .form-section {
+    max-width: 95%;
+    padding: 0 10px;
+  }
+
+  input, select {
+    font-size: 13px;
+    height: auto;
+  }
+}
+/* ===== Barra en 3 zonas ===== */
+#barra-superior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 14px;
+}
+
+.barra-izquierda,
+.barra-centro,
+.barra-derecha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Centro ocupa el espacio y centra el saludo */
+.barra-centro {
+  flex: 1;
+  justify-content: center;
+}
+
+.barra-centro { min-width: 0; }
+.barra-centro .bienvenida {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Saludo más grande y oscuro */
+.barra-centro .bienvenida {
+  font-size: 1.05rem;      /* un poquito más grande */
+  color: #2b1244;          /* más oscuro */
+  font-weight: 600;
+}
+
+/* Botones compactos a la izquierda */
+.barra-izquierda button {
+  min-width: 32px;
+  height: 28px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Botón salir a la derecha con gradiente (mantén tu estilo actual si ya lo tienes) */
+.barra-derecha #cerrar-sesion-barra {
+  background: linear-gradient(to right, #9a27f7, #e762d5);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.barra-derecha #cerrar-sesion-barra:hover { opacity: .9; }
+
+/* Mantén tu ajuste */
+.barra-derecha { 
+  padding-right: 22px;
+}
+
+/* Extra seguro para móviles con notch */
+@supports (padding: max(0px)) {
+  .barra-derecha {
+    padding-right: calc(22px + env(safe-area-inset-right, 0px));
+  }
+}
+
+/* En pantallas muy angostas, reduce un poco */
+@media (max-width: 480px) {
+  .barra-derecha { padding-right: 14px; }
+}
+/* Quitar bordes/fondos solo dentro del modal de configuración */
+#modal-configuracion .config-item,
+#modal-configuracion .contenedor-lista,
+#modal-configuracion .chips-wrapper,
+#modal-configuracion #lista-bills-pagos,
+#modal-configuracion #lista-personas-pagos,
+#modal-configuracion #lista-medios-pago-pagos,
+#modal-configuracion .config-item.pareja {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+/* Divisor entre configuraciones de vistas en el modal */
+#modal-configuracion #opciones-especificas > div {
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(85, 48, 113, 0.2); /* línea morada suave */
+}
+
+/* Quitar línea del último bloque para que no cierre con borde */
+#modal-configuracion #opciones-especificas > div:last-child {
+  border-bottom: none;
+}
+
+/* ================================
+   TABLAS DE DATOS GUARDADOS
+================================ */
+
+/* ===== Anchura y separación de listas ===== */
+#lista-ingresos,
+#lista-bills,
+#lista-egresos-personales,
+#lista-pagos{
+  width: min(50vw, 900px);
+  margin: 0 auto;
+  background: transparent !important;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px; /* separación entre tarjetas */
+}
+
+/* ===== Tarjeta: header + body|acciones en la misma fila ===== */
+.card-datos{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "header header"
+    "body   actions";
+}
+.card-datos .card-header{ grid-area: header; }
+.card-datos .card-body  { grid-area: body; }
+.card-datos .card-actions{
+  grid-area: actions;
+  align-self: center;
+  border: 0 !important;
+  padding: 0 !important;
+  margin-left: 10px;
+  display: inline-flex;
+  gap: 8px;
+}
+
+/* ===== Encabezado adopta colores de botones ===== */
+.card-datos .card-header{
+  background: linear-gradient(90deg, var(--btn-inicio,#2b97fa), var(--btn-fin,#9a27f7)) !important;
+  color: #fff !important;
+  font-weight: 700;
+  border-radius: 10px 10px 0 0;
+}
+
+/* ===== Iconitos sin gradiente ===== */
+button.icon-btn{
+  background: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 4px 6px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ===== Ingresos / Egresos / Pagos: una línea compacta ===== */
+#lista-ingresos .card-body,
+#lista-egresos-personales .card-body,
+#lista-pagos .card-body{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+#lista-ingresos .card-body > div,
+#lista-egresos-personales .card-body > div,
+#lista-pagos .card-body > div{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ==== BILLS en columnas, compacto ==== */
+/* Contenedor: filas que envuelven en columnas */
+/* Bills en columnas compactas */
+#lista-bills .bill-grid{
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start;
+  gap: 8px 14px;              /* fila, columna */
+  padding-right: 10px;        /* espacio para ✏️🗑️ */
+}
+
+#lista-bills .bill-grid .bill-item{
+  flex: 0 1 240px !important; /* ancho de cada tarjeta-persona */
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 8px;
+  white-space: nowrap;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+#lista-bills .bill-grid .bill-item strong{
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  max-width: 16ch;            /* recorta nombres largos */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#lista-bills .bill-grid .bill-item .icon-btn{
+  flex: 0 0 auto;
+  margin-left: 6px;
+}
+/* === KNOBS (ajusta solo estas dos variables) === */
+:root{
+  --list-max: 30rem;     /* antes 34rem; prueba 28–32rem si quieres aún más angosto */
+  --bill-item-min: 160px;/* ancho mínimo de cada tarjetita de persona en Bills */
+}
+
+/* === 1) Contenedor de TODAS las listas más angosto y centrado === */
+#lista-ingresos,
+#lista-bills,
+#lista-egresos-personales,
+#lista-pagos{
+  max-width: var(--list-max) !important;
+  width: 100% !important;
+  margin: 6px auto !important;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  background: transparent !important;
+}
+
+/* Compactar paddings (sin cambiar maquetado que ya te funciona) */
+.card-datos .card-header{ padding: 6px 10px !important; }
+.card-datos .card-body{   padding: 6px 10px !important; }
+
+/* === 2) Bills: mantener columnas pero en un contenedor más angosto === */
+#lista-bills .bill-grid{
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(var(--bill-item-min), 1fr)) !important;
+  gap: 8px 10px;
+  align-items: center;
+  padding-right: 72px; /* espacio para ✏️🗑️ */
+}
+
+/* Cada persona: Nombre · $monto · 📩 en UNA línea (lo que ya te funciona) */
+#lista-bills .bill-grid > div{
+  grid-column: auto / span 1 !important;
+  width: max-content !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 8px;
+  white-space: nowrap;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+#lista-bills .bill-grid > div strong{
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#lista-bills .bill-grid > div .icon-btn{
+  flex: 0 0 auto;
+  margin-left: 6px;
+}
+
+/* Móvil: ancho completo */
+@media (max-width:640px){
+  #lista-ingresos,
+  #lista-bills,
+  #lista-egresos-personales,
+  #lista-pagos{
+    max-width: 100% !important;
+    padding-inline: 10px;
+  }
+}
+/* Forzar texto BLANCO en todos los encabezados de tarjetas */
+.card-datos .card-header,
+.card-datos .card-header *{
+  color:#fff !important;
+}
+/* Centrar encabezados de TODAS las listas */
+#lista-ingresos .card-header,
+#lista-bills .card-header,
+#lista-egresos-personales .card-header,
+#lista-pagos .card-header{
+  display: flex;
+  align-items: center;
+  justify-content: center;   /* centra horizontal */
+  text-align: center;        /* centra texto si hay varias líneas */
+  flex-wrap: wrap;           /* permite salto manteniendo el centrado */
+  gap: 6px;                  /* espacio entre iconos y texto */
+}
+
+/* En Pagos puede que tengas una regla vieja con space-between; la anulamos */
+#lista-pagos .card-header{
+  justify-content: center !important;
+}
+
+.mini-disp-overlay[hidden]{display:none}
+.mini-disp-overlay{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.35);z-index:9999}
+.mini-disp-card{position:relative;background:#fff;border-radius:16px;padding:16px 18px;min-width:260px;max-width:92vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.mini-disp-close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:18px;cursor:pointer;opacity:.7}
+.mini-disp-close:hover{opacity:1}
+.mini-disp-card h3{margin:6px 0 10px;font-size:18px}
+.mini-disp-card .num{font-weight:700;font-size:22px}
+.mini-disp-card .sub{opacity:.8;font-size:12px;display:block;margin-top:6px}
+#btn-mini-disponible {
+  margin-left: 6px; /* ajusta el valor si quieres más/menos espacio */
+}
+.mini-disp-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: 0;
+  background: transparent;
+  font-size: 14px; /* 👈 aquí está el tamaño */
+  cursor: pointer;
+  opacity: .7;
+}
+.mini-disp-close {
+  font-size: 14px;   /* antes 18px */
+  top: 6px;          /* lo bajamos un pelín */
+  right: 8px;        /* lo acercamos un poco al borde */
+}
+.mini-disp-close {
+  padding: 2px;
+  border-radius: 4px; /* así tiene un hover lindo si le ponemos */
+}
+/* ===== Permitir salto de línea en los cuerpos de las tarjetas ===== */
+#lista-ingresos .card-body,
+#lista-egresos-personales .card-body,
+#lista-pagos .card-body{
+  flex-wrap: wrap !important;      /* antes: nowrap */
+  align-items: flex-start;
+  row-gap: 6px;
+  overflow: visible;
+}
+
+/* Los items internos ya no se fuerzan a una sola línea */
+#lista-ingresos .card-body > div,
+#lista-egresos-personales .card-body > div,
+#lista-pagos .card-body > div{
+  white-space: normal !important;   /* antes: nowrap */
+  min-width: 0;                     /* evita desbordes en flex */
+  flex: 0 1 auto;                   /* permite envolver */
+  word-break: break-word;           /* por si hay textos largos sin espacios */
+}
+
+/* Si alguna vez pintas una nota, que vaya a renglón completo */
+#lista-ingresos .card-body .nota,
+#lista-egresos-personales .card-body .nota,
+#lista-pagos .card-body .nota{
+  flex-basis: 100%;
+}
+/* ---- BILLS: evitar que el icono quede "detrás" ---- */
+
+/* La grilla deja que cada columna crezca hasta su contenido
+   (no se aplasta a 1fr si no cabe). */
+#lista-bills .bill-grid{
+  grid-template-columns: repeat(auto-fit, minmax(var(--bill-item-min), max-content)) !important;
+  overflow: visible; /* por si hay sombras/hover */
+}
+
+/* Cada item crea su propio contexto y nunca corta el icono */
+#lista-bills .bill-grid .bill-item{
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+  padding-right: 22px;     /* un colchoncito por si el icono queda al borde */
+  white-space: nowrap;     /* seguimos en una sola línea para cada persona */
+  gap: 8px;
+}
+/* Botón SOLO WhatsApp: SIEMPRE transparente */
+.wa-btn{
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 .4rem;
+  line-height: 1;
+  font-size: 18px;
+  color: inherit;           /* usa el color del texto del contexto */
+  cursor: pointer;
+}
+
+/* Asegura transparencia en hover/focus/active */
+.wa-btn:hover,
+.wa-btn:active,
+.wa-btn:focus{
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none;            /* si quieres conservar accesibilidad, comenta esta línea */
+}
+
+/* (Opcional) si quieres un enfoque mínimo sin fondo: */
+.wa-btn:focus-visible{
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+

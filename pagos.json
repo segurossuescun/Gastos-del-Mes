@@ -1,0 +1,26 @@
+[
+  {
+    "bill": "Gas",
+    "monto": 45,
+    "persona": "MARI",
+    "medio": "Zelle",
+    "fecha": "2025-06-30",
+    "nota": ""
+  },
+  {
+    "bill": "ATT",
+    "monto": 45,
+    "persona": "GABO",
+    "medio": "Zelle",
+    "fecha": "2025-07-03",
+    "nota": ""
+  },
+  {
+    "bill": "Luz",
+    "monto": 45,
+    "persona": "YULI",
+    "medio": "Zelle",
+    "fecha": "2025-07-03",
+    "nota": ""
+  }
+]

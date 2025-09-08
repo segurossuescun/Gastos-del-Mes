@@ -1,0 +1,68 @@
+[
+  {
+    "fecha": "2025-07-13",
+    "monto": 45,
+    "fuente": "Chipotle",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-01",
+    "monto": 10,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-06-04",
+    "monto": 1400,
+    "fuente": "Chipotle",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-05-29",
+    "monto": 123,
+    "fuente": "Chipotle",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-06",
+    "monto": 120,
+    "fuente": "Chipotle",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-06",
+    "monto": 45,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-01",
+    "monto": 1000,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-03",
+    "monto": 1,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-03",
+    "monto": 130,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-31",
+    "monto": 145,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  },
+  {
+    "fecha": "2025-07-02",
+    "monto": 450,
+    "fuente": "Seguros Suescun",
+    "nota": ""
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "name": "Gastos del Mes",
+  "short_name": "Gastos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#553071",
+  "icons": [
+    {
+      "src": "/static/icons/gasto192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/gasto512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

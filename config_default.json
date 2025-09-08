@@ -1,0 +1,53 @@
+{
+  "colores": {
+    "fondo": "#f9f9f9",
+    "boton_inicio": "#9a27f7",
+    "boton_fin": "#e762d5"
+  },
+
+    "tarjetaResumen": {
+      "colorInicio": "#fa9be2",
+      "colorFinal": "#ffffff"
+    },
+
+  "fuentes": {
+    "titulo": "Gochi Hand",
+    "colorTitulo": "#553071",
+    "secundario": "Arial",
+    "colorSecundario": "#8b68b0"
+  },
+
+  "logo": "",
+  "vistas": ["ingresos", "bills", "egresos", "pagos"],
+
+  "ingresos_fuentes": ["💼 Trabajo", "🛒 Tienda"],
+
+  "personas": [
+    { "nombre": "Persona1", "telefono": "+1234567890" },
+    { "nombre": "Persona2", "telefono": "+0987654321" }
+  ],
+
+  "bills_conf": [
+    { "nombre": "Luz",  "personas": ["Persona1", "Persona2"] },
+    { "nombre": "Agua", "personas": ["Persona1"] }
+  ],
+
+  "egresos_conf": [
+    { "categoria": "🍔 Comida", "subcategorias": ["Restaurante", "Supermercado"] }
+  ],
+
+  "medios_pago": [
+    { "medio": "💳 Tarjeta", "submedios": ["Crédito", "Débito"] },
+    { "medio": "Efectivo",  "submedios": [] }
+  ],
+
+  "pagos_config": {
+    "bills": ["Luz", "Agua"],
+    "personas": ["Persona1", "Persona2"],
+    "medios": ["💳 Tarjeta", "Efectivo"],
+    "submediosPorMedio": {
+      "💳 Tarjeta": ["Crédito", "Débito"],
+      "Efectivo": []
+    }
+  }
+}

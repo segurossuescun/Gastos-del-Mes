@@ -1,0 +1,79 @@
+[
+  {
+    "bill": "Agua",
+    "fecha": "2025-03-01",
+    "monto": 150,
+    "montos": {
+      "ADRI": 37.5,
+      "MARI": 37.5,
+      "YULI": 37.5,
+      "GABO": 37.5
+    }
+  },
+  {
+    "bill": "Luz",
+    "fecha": "2025-07-06",
+    "monto": 450,
+    "montos": {
+      "ADRI": 112.5,
+      "MARI": 112.5,
+      "YULI": 112.5,
+      "GABO": 112.5
+    }
+  },
+  {
+    "bill": "Alquiler",
+    "fecha": "2025-07-01",
+    "monto": 1800,
+    "montos": {
+      "ADRI": 450,
+      "MARI": 450,
+      "YULI": 450,
+      "GABO": 450
+    }
+  },
+  {
+    "bill": "Gas",
+    "fecha": "2025-07-06",
+    "monto": 169,
+    "montos": {
+      "ADRI": 42.25,
+      "MARI": 42.25,
+      "YULI": 42.25,
+      "GABO": 42.25
+    }
+  },
+  {
+    "bill": "Agua",
+    "fecha": "2025-06-07",
+    "monto": 146,
+    "montos": {
+      "ADRI": 36.5,
+      "MARI": 36.5,
+      "YULI": 36.5,
+      "GABO": 36.5
+    }
+  },
+  {
+    "bill": "Agua",
+    "fecha": "2025-07-05",
+    "monto": 800,
+    "montos": {
+      "ADRI": 200,
+      "MARI": 200,
+      "YULI": 200,
+      "GABO": 200
+    }
+  },
+  {
+    "bill": "Luz",
+    "fecha": "2025-07-01",
+    "monto": 120,
+    "montos": {
+      "ADRI": 30,
+      "MARI": 30,
+      "YULI": 30,
+      "GABO": 30
+    }
+  }
+]

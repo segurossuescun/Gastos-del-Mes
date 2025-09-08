@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="preload" as="image" href="/static/fondos/logo.png">
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gastos del Mes</title>
+
+  <!-- PWA / Iconos -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#8b68b0">
+  <link rel="icon" href="/static/icons/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/static/icons/gasto192.png">
+
+  <!-- Preload de fuentes (ideal .woff2) -->
+  <link rel="preload" href="/static/Gochi_Hand/GochiHand-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/Cookie/Cookie-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/Boogaloo/Boogaloo-Regular.woff2" as="font" type="font/woff2" crossorigin>
+
+  <!-- Tu CSS principal -->
+  <link rel="stylesheet" href="/static/style.css">
+
+  <!-- Evitar FOUC/FOUT: ocultar hasta que carguen estilos y fuentes -->
+  <style>
+    body { visibility: hidden; }
+    body.ready { visibility: visible; }
+  </style>
+  <script>
+    (function () {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () { document.body.classList.add('ready'); });
+      } else {
+        window.addEventListener('DOMContentLoaded', function () { document.body.classList.add('ready'); });
+      }
+    })();
+  </script>
+
+  <!-- (Opcional) Lucide: solo si usas íconos <i data-lucide="phone"> -->
+  <!-- Si no los usas, elimina las 2 líneas siguientes -->
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide && lucide.createIcons) lucide.createIcons();
+    });
+  </script>
+</head>
+
+<body class="is-loading">
+
+<!-- Splash -->
+<div id="splash">
+  <img src="/static/fondos/logo.png" alt="Splash">
+</div>
+
+<!-- Contenido de la app -->
+ <div id="contenido-app" style="display: none;">
+    <div id="barra-superior" style="display:none;" class="barra-superior">
+    <div class="barra-izquierda">
+      <button id="btn-perfil" class="btn-perfil" type="button">👤 Perfil</button>
+      <button id="abrir-configuracion" class="btn-config" title="Configuración">⚙️</button>
+
+      <!-- 📞 fijo en el DOM -->
+      <div class="telefono-wrapper">
+        <button id="btn-telefono" class="btn-telefono" type="button" title="Teléfono">📞</button>
+        <div id="popover-telefono" class="popover-telefono" aria-hidden="true">
+          <div class="tel-label">Teléfono</div>
+          <div id="telefono-dueno-pop">—</div>
+        </div>
+      <button id="btn-mini-disponible"
+        class="btn-telefono"
+        title="Disponible del mes"
+        aria-label="Disponible">💵</button>
+      </div>
+    </div>
+
+    <div class="barra-centro">
+      <div class="bienvenida">
+        👋 Hola,&nbsp;<span id="nombre-usuario-barra"></span>
+      </div>
+    </div>
+
+    <div class="barra-derecha">
+      <button id="cerrar-sesion-barra">❌ Salir</button>
+    </div>
+  </div>
+
+    <header class="encabezado">
+      <div class="encabezado-app">
+        <img src="" alt="Logo Cliente" class="logo-izquierda" style="display:none;">
+        <h1 class="titulo">💸 Gastos del Mes</h1>
+        <img src="/static/fondos/logo.png" alt="Logo G$Adri" class="logo-principal">
+      </div>
+
+      <nav id="menu-vistas" class="menu-lateral">
+        <button data-vista="ingresos" onclick="mostrarVista('ingresos')">💵 Ingresos</button>
+        <button data-vista="bills" onclick="mostrarVista('bills')">📄 Bills</button>
+        <button data-vista="egresos" onclick="mostrarVista('egresos')">💸 Egresos</button>
+        <button data-vista="pagos" onclick="mostrarVista('pagos')">💰 Pagos</button>
+      </nav>
+    </header>
+
+   <!-- CONFIGURACION -->
+   <div id="modal-configuracion" class="modal-overlay">
+      <div class="modal-content">
+        <h2>⚙️ Configuración</h2>
+
+        <div class="config-item pareja">
+          <label for="conf-fondo">🎨 Fondo:</label>
+          <input type="color" id="conf-fondo">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-color-titulo">🎨 Color Títulos 1:</label>
+          <input type="color" id="conf-color-titulo">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-color-secundario">🎨 Color Títulos 2:</label>
+          <input type="color" id="conf-color-secundario">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-boton-inicio">🎨 Botón Inicio:</label>
+          <input type="color" id="conf-boton-inicio" value="#9a27f7">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-boton-fin">🎨 Botón Fin:</label>
+          <input type="color" id="conf-boton-fin" value="#e762d5">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-resumen-inicio">🎨 Tarjeta Resumen Inicio:</label>
+          <input type="color" id="conf-resumen-inicio" value="#fa9be2">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-resumen-fin">🎨 Tarjeta Resumen Fin:</label>
+          <input type="color" id="conf-resumen-fin" value="#ffffff">
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-fuente-titulo">🔤 Fuente título:</label>
+          <select id="conf-fuente-titulo">
+            <option value="Gochi Hand">Gochi Hand</option>
+            <option value="Cookie">Cookie</option>
+            <option value="Marck Script">Marck Script</option>
+            <option value="Aclonica">Aclonica</option>
+            <option value="Arial" selected>Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+          </select>
+        </div>
+
+        <div class="config-item pareja">
+          <label for="conf-fuente-cuerpo">🔤 Fuente cuerpo:</label>
+          <select id="conf-fuente-cuerpo">
+            <option value="Arial">Arial</option>
+            <option value="Roboto">Roboto</option>
+            <option value="Comic Sans MS">Comic Sans MS</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Open Sans">Open Sans</option>
+            <option value="Gochi Hand">Gochi Hand</option>
+          </select>
+        </div>
+
+        <div class="config-item logo">
+          <label for="conf-logo">🖼️ Logo:</label>
+          <input type="file" id="conf-logo" accept="image/*">
+          <div style="margin-top: 8px;">
+            <img id="preview-logo" src="" alt="Vista previa" 
+                  style="max-width: 80px; max-height:80px; border-radius: 10px; display:none; object-fit: cover;">
+          </div>
+       </div>
+
+        <div class="config-item vistas">
+          <h4 class="modal-subtitulo">👀 Vistas visibles:</h4>
+          <div id="vistas-opciones">
+            <label><input type="checkbox" class="vista-checkbox" value="ingresos"> Ingresos</label>
+            <label><input type="checkbox" class="vista-checkbox" value="bills"> Bills</label>
+            <label><input type="checkbox" class="vista-checkbox" value="egresos"> Egresos</label>
+            <label><input type="checkbox" class="vista-checkbox" value="pagos"> Pagos</label>
+          </div>
+        </div>
+
+        <div id="opciones-especificas">
+          <!-- Aquí aparecen dinámicamente los campos específicos -->
+        </div>
+
+        <hr>
+
+        <div style="margin-top:10px; text-align:center">
+          <button onclick="aplicarConfiguracionDesdeModal()">👀 Aplicar</button>
+          <button onclick="guardarConfiguracion()">💾 Guardar</button>
+          <button onclick="cerrarModalConfiguracion()">❌ Cerrar</button>
+        </div>
+        <div style="margin-top:10px; text-align:center">
+          <button onclick="restablecerConfiguracion()" 
+                  style="background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; padding:6px 12px; border-radius:5px;">
+            🧹 Restablecer valores
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      
+    <!-- INGRESOS -->
+    <section id="ingresos" class="vista">
+  <h2 class="titulo">✒️ Registrar Ingreso</h2>
+
+  <!-- 📄 Formulario para registrar ingreso -->
+  <form id="form-ingresos" class="formulario">
+    <label for="fecha-ingreso">Fecha:</label>
+    <input type="date" id="fecha-ingreso" name="fecha" required>
+
+    <label for="monto-ingreso">Monto ($):</label>
+    <input type="number" id="monto-ingreso" name="monto" step="0.01" required placeholder="Ej: $1200.00">
+
+    <label for="fuente-ingreso">Fuente:</label>
+    <select id="fuente-ingreso" name="fuente" required>
+      <option value="" disabled selected>Seleccionar fuente</option>
+      <!-- opciones dinámicas aquí -->
+    </select>
+
+    <!-- Input para "Otra fuente" -->
+    <div id="fuente-otra-container" hidden>
+      <input type="text" id="fuente-otra" placeholder="Especificar otra fuente">
+    </div>
+
+    <label for="nota-ingreso">Nota:</label>
+    <input type="text" id="nota-ingreso" placeholder="Opcional">
+
+    <button type="submit">💾 Guardar Ingreso</button>
+  </form>
+
+  <!-- 🧾 Tarjeta flotante de resumen -->
+  <div id="resumen-ingresos" class="tarjeta-resumen flotante">
+    <div class="total-linea"></div>
+    <div class="disponible-linea"
+        data-disponible-panel
+        data-mes-source="filtro-mes-ingreso"></div>
+  </div>
+
+  <!-- 🔍 Filtros -->
+  <div id="filtros-ingresos" class="filtros">
+    <h3 class="titulo-secundario">🔍 Filtrar Ingresos</h3>
+
+    <div>
+      <label for="filtro-mes-ingreso">Mes:</label>
+      <input type="month" id="filtro-mes-ingreso">
+    </div>
+
+    <div>
+      <label for="filtro-fuente-ingreso">Fuente:</label>
+      <select id="filtro-fuente-ingreso" name="filtro-fuente">
+        <option value="">Todas</option>
+        <!-- opciones dinámicas aquí -->
+      </select>
+    </div>
+  </div>
+
+  <!-- 📋 Lista de ingresos -->
+  <div id="lista-ingresos" class="lista"></div>
+
+  <!-- 📊 Gráfico -->
+  <div id="grafico-ingresos-contenedor" class="grafico-contenedor flotante">
+    <canvas id="grafico-ingresos" width="300" height="300"></canvas>
+  </div>
+</section>
+
+ <!-- BILLS -->
+<section id="bills" class="vista">
+  <h2 class="titulo">✒️ Registrar Bill</h2>
+
+  <form id="form-bills" class="formulario">
+    <label for="bill-tipo">Tipo de Bill:</label>
+    <select id="bill-tipo" required>
+      <option value="" disabled selected>Selecciona tipo</option>
+      <!-- opciones dinámicas -->
+    </select>
+
+    <label for="bill-fecha">Fecha:</label>
+    <input type="date" id="bill-fecha" required>
+
+    <label for="bill-monto">Monto Total ($):</label>
+    <input type="number" id="bill-monto" step="0.01" required>
+
+    <button type="submit">💾 Guardar Bill</button>
+  </form>
+
+  <!-- 🧾 Resumen -->
+  <div id="resumen-bills" class="tarjeta-resumen flotante">
+    📬 Total de facturas: $0.00
+  </div>
+
+  <!-- 🔍 Filtros -->
+  <div id="filtros-bills" class="filtros">
+    <h3 class="titulo-secundario">🔍 Filtrar Bills</h3>
+    <div>
+      <label for="filtro-mes-bill">Mes:</label>
+      <input type="month" id="filtro-mes-bill">
+    </div>
+    <div>
+      <label for="filtro-tipo-bill">Tipo:</label>
+      <select id="filtro-tipo-bill">
+        <option value="">Todos</option>
+       <!-- opciones dinámicas -->
+      </select>
+    </div>
+    <div>
+      <label for="buscador-bills">Buscar:</label>
+      <input type="text" id="buscador-bills" placeholder="Buscar…">
+    </div>
+  </div>
+
+  <div id="lista-bills" class="lista"></div>
+
+  <!-- 📊 Gráfico -->
+  <div id="grafico-bills-contenedor" class="grafico-contenedor flotante">
+    <canvas id="grafico-bills" width="300" height="300"></canvas>
+  </div>
+</section>
+
+  <!-- EGRESOS -->
+<section id="egresos" class="vista">
+  <h2 class="titulo">✒️ Registrar Egreso</h2>
+
+  <form id="form-egresos-personales">
+    <label for="fecha-egreso">Fecha:</label>
+    <input type="date" id="fecha-egreso" name="fecha" required>
+
+    <label for="monto-egreso">Monto ($):</label>
+    <input type="number" id="monto-egreso" name="monto" step="0.01" required placeholder="$$ 🤑">
+
+    <label for="categoria-egreso">Categoría:</label>
+    <select id="categoria-egreso" name="categoria" required>
+      <option value="">Seleccionar</option>
+    </select>
+
+
+   <div id="subcategoria-egreso-container" style="display: none;">
+      <label for="subcategoria-egreso">Subcategoría:</label>
+      <select id="subcategoria-egreso">
+        <option value="">Seleccionar</option>
+      </select>
+    </div>
+
+    <label for="medio-egreso">Medio de Pago:</label>
+      <select id="medio-egreso" name="medio" required>
+        <option value="">Seleccionar</option>
+      </select>
+
+      <div id="submedio-egreso-container" style="display: none;">
+        <label for="submedio-egreso">Submedio:</label>
+        <select id="submedio-egreso" name="submedio">
+          <option value="">Seleccionar</option>
+        </select>
+      </div>
+
+    <label for="nota-egreso">Nota:</label>
+    <input type="text" id="nota-egreso" name="nota" placeholder="Opcional">
+
+    <button type="submit">💾 Guardar Egreso</button>
+  </form>
+
+  <!-- TARJETA RESUMEN flotante -->
+  <div id="resumen-egresos" class="tarjeta-resumen flotante">
+    💸 Total de egresos en todos los meses: $0.00
+  </div>
+
+  <div id="filtros-egresos" class="filtros">
+  <h3 class="titulo-secundario">Filtrar Egresos</h3>
+
+  <div>
+    <label for="filtro-mes-egreso">Mes:</label>
+    <input type="month" id="filtro-mes-egreso">
+  </div>
+
+  <div>
+    <label for="filtro-categoria-egreso">Categoría:</label>
+    <select id="filtro-categoria-egreso">
+      <option value="">Todas</option>
+      <!-- opciones dinámicas -->
+    </select>
+  </div>
+</div>
+
+  <!-- Lista de egresos -->
+  <div id="lista-egresos-personales"></div>
+
+  <!-- Grafico Egreso -->
+  <div id="grafico-egresos-contenedor" class="grafico-contenedor flotante">
+    <canvas id="grafico-egresos" width="300" height="300"></canvas>
+  </div>
+</section>
+
+   <!-- PAGOS -->
+<section id="pagos" class="vista">
+  <h2 class="titulo">✒️ Registrar Pago</h2>
+
+  <form id="form-pagos">
+    <label for="bill-pago">Tipo de Bill:</label>
+    <select id="bill-pago" name="bill" required>
+      <option value="">Seleccionar</option>
+      <!-- Se llenará dinámicamente -->
+    </select>
+
+
+    <label for="monto-total">Monto Pagado ($):</label>
+    <input type="number" id="monto-total" name="montoTotal" step="0.01" required placeholder="$$ 🤑">
+
+    <label for="persona-pago">Persona que Pagó:</label>
+    <select id="persona-pago" name="persona" required>
+      <option value="">Seleccionar</option>
+      <!-- Se llenará dinámicamente -->
+    </select>
+
+    <label for="medio-pago">Medio de Pago:</label>
+    <select id="medio-pago" name="medio" required>
+      <option value="">Seleccionar</option>
+    </select>
+
+    <!-- NUEVO: submedio dependiente del medio -->
+    <div id="submedio-pago-container" style="display:none;">
+      <label for="submedio-pago">Submedio:</label>
+      <select id="submedio-pago" name="submedio">
+        <option value="">Seleccionar</option>
+      </select>
+    </div>
+
+    <label for="fecha-pago">Fecha de Pago:</label>
+    <input type="date" id="fecha-pago" required>
+
+    <label for="nota-pago">Nota:</label>
+    <input type="text" id="nota-pago" placeholder="Opcional">
+
+    <button type="submit">💾 Registrar Pago</button>
+  </form>
+
+  <!-- Tarjeta resumen flotante -->
+  <div id="resumen-pagos" class="tarjeta-resumen flotante">
+    💳 Total de pagos en [mes]: $0.00
+  </div>
+ 
+  <!-- Filtros de Pagos -->
+  <div id="filtros-pagos" class="filtros">
+    <h3 class="titulo-secundario">Filtrar Pagos</h3>
+    <div>
+      <label for="filtro-mes-pago">Mes:</label>
+      <input type="month" id="filtro-mes-pago">
+    </div>
+    <div>
+      <label for="filtro-persona-pago">Persona:</label>
+      <select id="filtro-persona-pago">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div>
+      <label for="filtro-bill-pago">Tipo de Bill:</label>
+      <select id="filtro-bill-pago">
+        <option value="">Todos</option>
+      </select>
+    </div>
+  </div>
+  <!-- Lista de pagos -->
+  <div id="lista-pagos"></div>
+
+  <!-- Grafico Pagos -->
+  <div id="grafico-pagos-contenedor" class="grafico-contenedor flotante">
+    <canvas id="grafico-pagos"></canvas>
+  </div>
+
+</section>
+
+    <!-- Registro -->
+  <div id="usuario" class="vista">
+    <div id="seccion-usuario" class="form-container">
+    <h3>
+        <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="#553071" viewBox="0 0 24 24">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+        Usuario
+      </h3>
+
+    <div id="seccion-registro">
+      <h4>📝 Registro</h4>
+      <form id="form-registro">
+        <!-- Nombre -->
+        <input type="text" id="registro-nombre" placeholder="Nombre" required>
+
+        <!-- Usuario + Dominio -->
+        <div class="correo-container">
+          <input 
+            type="text" 
+            id="registro-user" 
+            placeholder="Usuario" 
+            required 
+          >
+          <select 
+            id="registro-dominio" 
+            required
+          >
+            <option value="@gmail.com">@gmail.com</option>
+            <option value="@hotmail.com">@hotmail.com</option>
+            <option value="@yahoo.com">@yahoo.com</option>
+            <option value="@outlook.com">@outlook.com</option>
+            <option value="@icloud.com">@icloud.com</option>
+          </select>
+        </div>
+
+        <!-- Contraseña -->
+        <div class="input-con-ojo">
+          <input type="password" id="registro-password" placeholder="Contraseña" required>
+          <span class="boton-ojo">👁️</span>
+        </div>
+
+        <!-- Nota -->
+        <small style="
+          font-family: Arial, sans-serif;
+          color: #553071;
+          font-size: 12px;
+          line-height: 1.2;
+          text-align: center;
+          display: block;
+          margin-top: 6px;">
+          La contraseña debe tener entre <strong>8–16</strong> caracteres, con al menos: 
+          <strong>Mayúsculas, Minúsculas, Números</strong> y símbolos como <strong>(* & ^ % $ # @ !)</strong>.
+        </small>
+        <button type="submit">Crear cuenta</button>
+
+      </form>
+    </div>
+<!-- Login -->
+    <div id="seccion-login">
+      <h4>🔒 Iniciar sesión</h4>
+      <form id="form-login">
+        <input type="text" id="login-usuario" placeholder="Usuario" required>
+
+        <div class="input-con-ojo">
+          <input type="password" id="login-password" placeholder="Contraseña" required>
+          <span class="boton-ojo">👁️</span>
+        </div>
+
+        <button type="submit">Entrar</button>
+      </form>
+    </div>
+
+    <!-- Zona privada -->
+      <div id="zona-privada" style="display:none;">
+        <h4>🎉 Bienvenido, <span id="usuario-nombre"></span></h4>
+      </div>
+  </div>
+</div>
+
+<div id="mini-disponible-overlay" class="mini-disp-overlay" hidden>
+  <div class="mini-disp-card" role="dialog" aria-modal="true" aria-label="Disponible del mes">
+    <button class="mini-disp-close" aria-label="Cerrar">✕</button>
+    <div id="mini-disponible-content">Cargando…</div>
+  </div>
+</main>
+
+<!-- 1) Flags de entorno + versión -->
+<script>
+  window.__PROD__ = true;          // producción
+  window.__VERSION__ = "1.0.1";    // versión
+  // logs centralizados (opc.)
+  window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
+  window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
+  window.err  = (...a) => console.error(...a);
+</script>
+
+<!-- 2) Config cliente opcional (no rompe si no existe) -->
+<script>
+  window.APP = { apiBase: "/", enableAnalytics: false, brand:{name:"Gastos del Mes"} };
+</script>
+
+<!-- 3) Librerías de terceros antes de tu script -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+
+<!-- 4) Tu app -->
+<script src="/static/script.js" defer></script>
+
+<script>
+  // Registro simple del SW (con versión para forzar update cuando publiques)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const v = (window.__VERSION__ || '1.0.0');
+      navigator.serviceWorker.register(`/service-worker.js?v=${encodeURIComponent(v)}`)
+        .then(reg => console.log('SW registrado:', reg.scope))
+        .catch(err => console.error('SW error:', err));
+    });
+  }
+</script>
+
+</body>
+</html>
+
