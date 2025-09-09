@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from datetime import datetime, timedelta, timezone  # si no lo tienes ya
+
+SIGNUP_MODE = os.getenv("SIGNUP_MODE", "open").lower()  # open|code|closed
+TRIAL_DAYS  = int(os.getenv("TRIAL_DAYS", "7"))
+
 # ---------------------------
 # Config Flask
 # ---------------------------
@@ -61,6 +66,31 @@ def require_auth():
         return jsonify({"ok": False, "error": "No autorizado"}), 401
     return u
 
+def require_active_subscription():
+    def deco(fn):
+        @wraps(fn)
+        def wrapper(*a, **kw):
+            if not session.get("user_id"):
+                return jsonify({"ok": False, "error": "No autorizado"}), 401
+            with engine.begin() as conn:
+                u = conn.execute(text("""
+                    SELECT is_active, plan, trial_ends_at
+                    FROM users
+                    WHERE id = :id
+                """), {"id": session["user_id"]}).mappings().first()
+
+            if not u or not u["is_active"]:
+                return jsonify({"ok": False, "error": "Cuenta desactivada"}), 403
+
+            # Si está en trial y ya venció → bloquear
+            if (u["plan"] or "trial") == "trial":
+                if u["trial_ends_at"] and u["trial_ends_at"] < datetime.now(timezone.utc):
+                    return jsonify({"ok": False, "error": "Prueba finalizada — requiere suscripción"}), 402
+
+            return fn(*a, **kw)
+        return wrapper
+    return deco
+
 @app.post("/registro")
 def registro():
     data = request.get_json(force=True, silent=True) or {}
@@ -81,10 +111,24 @@ def registro():
                 return jsonify({"ok": False, "error": "El correo ya está registrado"}), 409
 
             pwd_hash = generate_password_hash(password)
+
+            # trial: comienza hoy y termina en TRIAL_DAYS
+            now = datetime.now(timezone.utc)
+            trial_end = now + timedelta(days=TRIAL_DAYS)
+
             row = conn.execute(
-                text("""INSERT INTO users (name, email, password_hash)
-                        VALUES (:name, :email, :pwd) RETURNING id, email, name"""),
-                {"name": nombre or email, "email": email, "pwd": pwd_hash}
+                text("""
+                INSERT INTO users (name, email, password_hash, trial_started_at, trial_ends_at, plan, is_active)
+                VALUES (:name, :email, :pwd, :ts, :te, 'trial', true)
+                RETURNING id, email, name
+                """),
+                {
+                "name": nombre or email,
+                "email": email,
+                "pwd": pwd_hash,
+                "ts": now,
+                "te": trial_end,
+                }
             ).mappings().first()
 
         # auto-login
@@ -107,22 +151,55 @@ def login():
     try:
         with engine.begin() as conn:
             row = conn.execute(
-                text("""SELECT id, email, name, password_hash
-                        FROM users WHERE email = :email LIMIT 1"""),
+                text("""
+                    SELECT id, email, name, password_hash,
+                           COALESCE(plan, 'trial') AS plan,
+                           trial_ends_at,
+                           COALESCE(is_active, true) AS is_active
+                    FROM users
+                    WHERE email = :email
+                    LIMIT 1
+                """),
                 {"email": email}
             ).mappings().first()
 
             if not row or not check_password_hash(row["password_hash"], password):
                 return jsonify({"ok": False, "error": "Usuario o contraseña inválidos"}), 401
 
+            if not row["is_active"]:
+                return jsonify({"ok": False, "error": "Cuenta desactivada"}), 403
+
+            # calcular días restantes (solo aplica a trial)
+            days_left = None
+            if row["plan"] == "trial" and row["trial_ends_at"]:
+                days_left = (row["trial_ends_at"].date() - datetime.now(timezone.utc).date()).days
+
+                # trial vencido → bloquear login
+                if days_left < 0:
+                    return jsonify({
+                        "ok": False,
+                        "error": "Prueba finalizada — requiere suscripción",
+                        "plan": row["plan"],
+                        "days_left": days_left
+                    }), 402
+
+            # último login
             conn.execute(text("UPDATE users SET last_login_at = now() WHERE id = :id"),
                          {"id": row["id"]})
 
+        # login OK → setear sesión
         session.clear()
         session["user_id"] = int(row["id"])
         session["email"]   = (row["email"] or "").lower()
 
-        return jsonify({"ok": True, "id": row["id"], "email": row["email"], "nombre": row["name"]})
+        return jsonify({
+            "ok": True,
+            "id": row["id"],
+            "email": row["email"],
+            "nombre": row["name"],
+            "plan": row["plan"],
+            "days_left": days_left  # null si es paid o sin fecha
+        })
     except SQLAlchemyError as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -138,6 +215,18 @@ def session_info():
         return jsonify({"ok": False}), 401
     return jsonify({"ok": True, "user": u})
 
+@app.get("/account_status")
+@login_required
+def account_status():
+    with engine.begin() as conn:
+        u = conn.execute(text("""
+          SELECT plan, is_active, trial_ends_at
+          FROM users WHERE id=:id
+        """), {"id": session["user_id"]}).mappings().first()
+    days_left = None
+    if u and u["trial_ends_at"]:
+        days_left = (u["trial_ends_at"].date() - datetime.now(timezone.utc).date()).days
+    return jsonify({"ok": True, **u, "days_left": days_left})
 
 # ===========================
 # Compat: detector de columnas
@@ -230,6 +319,7 @@ def other_files(filename):
 # Tabla: configuracion (cliente TEXT, ... jsonb, apodo, telefono)
 # ---------------------------
 @app.get("/cargar_configuracion")
+@require_active_subscription()
 def cargar_configuracion():
     auth = require_auth()
     if not isinstance(auth, dict): 
@@ -309,6 +399,7 @@ def cargar_configuracion():
 
 # /guardar_configuracion
 @app.post("/guardar_configuracion")
+@require_active_subscription()
 def guardar_configuracion():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -410,6 +501,7 @@ def guardar_configuracion():
         return json_error(str(e), 500)
 
 @app.post("/restablecer_configuracion")
+@require_active_subscription()
 def restablecer_configuracion():
     auth = require_auth()
     if not isinstance(auth, dict): 
@@ -542,6 +634,7 @@ def restablecer_configuracion():
 # Perfil (apodo/telefono) en public.perfiles
 # ---------------------------
 @app.get("/cargar_perfil")
+@require_active_subscription()
 def cargar_perfil():
     auth = require_auth()
     if not isinstance(auth, dict): 
@@ -565,6 +658,7 @@ def cargar_perfil():
 from datetime import datetime  # asegúrate de tener esto arriba
 
 @app.post("/guardar_perfil")
+@require_active_subscription()
 def guardar_perfil():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -602,6 +696,7 @@ def guardar_perfil():
 # Tabla: ingresos(id, cliente, fecha, monto, fuente, nota)
 # ---------------------------
 @app.get("/cargar_ingresos")
+@require_active_subscription()
 def cargar_ingresos():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -630,6 +725,7 @@ def cargar_ingresos():
         return json_error(str(e), 500)
 
 @app.post("/guardar_ingreso")
+@require_active_subscription()
 def guardar_ingreso():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -663,6 +759,7 @@ def guardar_ingreso():
         return json_error(str(e), 500)
 
 @app.post("/eliminar_ingreso")
+@require_active_subscription()
 def eliminar_ingreso():
     auth = require_auth()
     if not isinstance(auth, dict): return auth
@@ -683,6 +780,7 @@ def eliminar_ingreso():
 # Tabla: bills(id, cliente, fecha, tipo, monto, montos jsonb)
 # ---------------------------
 @app.get("/cargar_bills")
+@require_active_subscription()
 def cargar_bills():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -733,6 +831,7 @@ def cargar_bills():
         return json_error(str(e), 500)
 
 @app.post("/guardar_bills")
+@require_active_subscription()
 def guardar_bills():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -810,6 +909,7 @@ def guardar_bills():
         return json_error(str(e), 500)
 
 @app.post("/eliminar_bill")
+@require_active_subscription()
 def eliminar_bill():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -842,6 +942,7 @@ def eliminar_bill():
 # ---------------------------
 
 @app.get("/cargar_egresos")
+@require_active_subscription()
 def cargar_egresos():
     auth = require_auth()
     if not isinstance(auth, dict): 
@@ -875,6 +976,7 @@ def cargar_egresos():
 
 
 @app.post("/guardar_egreso")
+@require_active_subscription()
 def guardar_egreso():
     auth = require_auth()
     if not isinstance(auth, dict): 
@@ -929,6 +1031,7 @@ def guardar_egreso():
 
 
 @app.post("/eliminar_egreso")
+@require_active_subscription()
 def eliminar_egreso():
     auth = require_auth()
     if not isinstance(auth, dict):
@@ -955,6 +1058,7 @@ def eliminar_egreso():
 # Tabla: pagos(id, cliente, fecha, bill, persona, medio, submedio, monto, nota)
 # ---------------------------
 @app.get("/cargar_pagos")
+@require_active_subscription()
 def cargar_pagos():
     auth = require_auth()
     if not isinstance(auth, dict): return auth
@@ -979,6 +1083,7 @@ def cargar_pagos():
         return json_error(str(e), 500)
 
 @app.post("/guardar_pago")
+@require_active_subscription()
 def guardar_pago():
     auth = require_auth()
     if not isinstance(auth, dict): return auth
@@ -1009,6 +1114,7 @@ def guardar_pago():
         return json_error(str(e), 500)
 
 @app.post("/eliminar_pago")
+@require_active_subscription()
 def eliminar_pago():
     auth = require_auth()
     if not isinstance(auth, dict): return auth

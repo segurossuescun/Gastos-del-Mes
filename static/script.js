@@ -560,19 +560,17 @@ function limpiarBillsConPersonasInvalidas(bills, personas) {
 // --- Gate de sesión (global)
 window.__sessionOK = false;
 
-const RUTAS_PRIVADAS = new Set([
-  '/cargar_configuracion','/guardar_configuracion',
-  '/cargar_bills','/guardar_bill','/eliminar_bill',
+window.RUTAS_PRIVADAS = new Set([
+  '/cargar_configuracion','/guardar_configuracion','/restablecer_configuracion',
+  '/cargar_perfil','/guardar_perfil',
   '/cargar_ingresos','/guardar_ingreso','/eliminar_ingreso',
+  '/cargar_bills','/guardar_bill','/eliminar_bill',
   '/cargar_egresos','/guardar_egreso','/eliminar_egreso',
-  '/cargar_pagos','/guardar_pago','/eliminar_pago',
-  '/cargar_perfil','/guardar_perfil'
+  '/cargar_pagos','/guardar_pago','/eliminar_pago'
 ]);
 
-// Helper opcional para encender/apagar el flag
-// Helper único: runtime flag + clase en <body> para la UI
 function _marcarSesion(on) {
-  window.__sessionOK = !!on;                          // <- dos "s"
+  window.__sessionOK = !!on;
   try { document.body.classList.toggle('is-auth', !!on); } catch {}
 }
 
@@ -885,6 +883,198 @@ async function fetchJSON(url, opts = {}, { silent401 = false } = {}) {
   const ctype = res.headers.get('content-type') || '';
   return ctype.includes('application/json') ? res.json() : res.text();
 }
+
+// =============================
+// LOGIN / REGISTRO + avisos trial
+// =============================
+
+// Normaliza email: exige correo completo en login (no “usuario” suelto)
+function normalizarEmailLogin(valor) {
+  const v = String(valor || "").trim().toLowerCase();
+  if (!v) return "";
+  if (v.includes("@")) return v; // ya es correo
+  Swal.fire({
+    icon: "info",
+    title: "Escribe tu correo completo",
+    text: "Incluye @gmail.com, @hotmail.com, etc.",
+  });
+  return "";
+}
+
+// Lógica de login con mensajes de trial/paid
+async function doLogin(email, password) {
+  try {
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+
+    if (!res.ok) {
+      if (res.status === 402) {
+        await Swal.fire({
+          icon: 'error',
+          title: '⛔ Tu prueba terminó',
+          text: 'Para seguir usando la app, activa tu suscripción.',
+          confirmButtonText: 'Entendido'
+        });
+        return;
+      }
+      const msg = data?.error || `Error ${res.status}`;
+      Swal.fire({ icon: 'error', title: 'No pudimos iniciar sesión', text: msg });
+      return;
+    }
+
+    // Login OK: mostrar mensajes según plan/días
+    if (data.plan === 'trial') {
+      const days = data.days_left;
+      if (typeof days === 'number') {
+        if (days <= 3) {
+          await Swal.fire({
+            icon: 'warning',
+            title: '⚠️ Tu prueba está por terminar',
+            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de acceso gratuito.`,
+            confirmButtonText: 'Vale'
+          });
+        } else {
+          await Swal.fire({
+            icon: 'info',
+            title: '🎉 Prueba gratuita activa',
+            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de prueba. ¡Recuerda suscribirte para no perder acceso!`,
+            confirmButtonText: 'Entendido'
+          });
+        }
+      }
+    } else if (data.plan === 'paid') {
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Gracias por suscribirte! 💜',
+        text: 'Tu acceso está activo más allá de la prueba.',
+        confirmButtonText: 'Continuar'
+      });
+    }
+
+    // Cierra login y arranca zona privada (ajusta a tu flujo si ya tienes helpers)
+    document.getElementById('seccion-login')?.classList.add('oculto');
+    document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+
+    // Si tienes funciones de carga, úsalas:
+    try { await iniciarZonaPrivada?.(); } catch {}
+    // Opcional: revisar días restantes en cada entrada
+    try { await checkAccountStatus?.(); } catch {}
+
+  } catch (err) {
+    console.error('Login error:', err);
+    Swal.fire({ icon: 'error', title: 'Ups', text: 'Error inesperado iniciando sesión.' });
+  }
+}
+
+// Aviso de días restantes al entrar (si ya logueado)
+async function checkAccountStatus() {
+  try {
+    const res = await fetch("/account_status");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const days = data.days_left;
+    if (days === null) return;        // paid → nada
+    if (days < 0) {
+      await Swal.fire({
+        icon: "error",
+        title: "⛔ Tu prueba terminó",
+        text: "Necesitas suscribirte para seguir usando la app.",
+        confirmButtonText: "Entendido"
+      });
+      return;
+    }
+    if (days <= 3) {
+      await Swal.fire({
+        icon: "warning",
+        title: "⚠️ Tu prueba está por terminar",
+        text: `Te quedan ${days} día${days !== 1 ? "s" : ""} de acceso gratuito.`,
+        confirmButtonText: "Vale"
+      });
+    }
+  } catch (err) {
+    console.error("Error verificando estado de cuenta:", err);
+  }
+}
+
+// === Listeners de formularios ===
+
+// LOGIN
+(function wireLoginForm(){
+  const form = document.getElementById('form-login');
+  if (!form) { document.addEventListener('DOMContentLoaded', wireLoginForm, { once:true }); return; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailInput = document.getElementById('login-usuario');
+    const passInput  = document.getElementById('login-password');
+    let email = normalizarEmailLogin(emailInput?.value);
+    const password = String(passInput?.value || "");
+    if (!email || !password) return;
+    await doLogin(email, password);
+  });
+})();
+
+// REGISTRO (usa tu input de usuario + select dominio)
+(function wireRegistroForm(){
+  const form = document.getElementById('form-registro');
+  if (!form) { document.addEventListener('DOMContentLoaded', wireRegistroForm, { once:true }); return; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre   = document.getElementById('registro-nombre')?.value?.trim() || "";
+    const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
+    const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
+    const password = document.getElementById('registro-password')?.value || "";
+
+    if (!usuario || !password) {
+      Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
+      return;
+    }
+    const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
+
+    try {
+      const res = await fetch('/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, email, password })
+      });
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch {}
+
+      if (!res.ok || data.ok === false) {
+        const msg = data?.error || `Error ${res.status}`;
+        Swal.fire({ icon:'error', title:'No pudimos registrar', text: msg });
+        return;
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: '🎉 ¡Cuenta creada!',
+        text: 'Tu prueba gratuita ya comenzó.',
+        confirmButtonText: 'Continuar'
+      });
+
+      // Tras autologin del back:
+      document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+      try { await iniciarZonaPrivada?.(); } catch {}
+      try { await checkAccountStatus?.(); } catch {}
+
+    } catch (err) {
+      console.error('Registro error:', err);
+      Swal.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
+    }
+  });
+})();
 
 // =============================
 // SPLASH
@@ -4594,8 +4784,9 @@ async function cargarConfiguracion() {
     console.error('Error al cargar configuración:', e);
   }
 }
-
+// =============
 // === Boot ===
+// =============
 function ensureSplash() {
   let splash = document.getElementById('splash');
   if (!splash) {
@@ -4669,7 +4860,7 @@ async function boot() {
   }
 
   // c) Sin usuario
-if (!ses || ses.ok === false || !ses.usuario) {
+if (!ses || ses.ok === false || !ses.user) {
   _marcarSesion(false);
   // PRIMERO ocultamos el splash y LUEGO mostramos el login
   ocultarSplash(() => {
@@ -4681,13 +4872,14 @@ if (!ses || ses.ok === false || !ses.usuario) {
 
 // d) Autenticado
 _marcarSesion(true);
-const user = ses.usuario || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
+const user = ses.user || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
 try { sessionStorage.setItem('usuario', JSON.stringify(user)); } catch {}
 
 await iniciarZonaPrivada(); // carga datos
 // PRIMERO ocultamos el splash y LUEGO mostramos la zona privada (si no la mostraste antes)
 ocultarSplash(() => {
   mostrarZonaPrivada?.(user);
+  checkAccountStatus?.();
   enforceAuthView?.();
 });
 }
