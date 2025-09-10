@@ -929,6 +929,18 @@ async function doLogin(email, password) {
       return;
     }
 
+    // ✅ Login OK → marca sesión y guarda usuario
+      if (typeof _marcarSesion === 'function') _marcarSesion(true);
+      else window.__sessionOK = true;
+
+      try {
+        sessionStorage.setItem('usuario', JSON.stringify({
+          id: data.id,
+          email: data.email,
+          nombre: data.nombre || data.email
+        }));
+      } catch {}
+
     // Login OK: mostrar mensajes según plan/días
     if (data.plan === 'trial') {
       const days = data.days_left;
@@ -1064,10 +1076,40 @@ async function checkAccountStatus() {
         confirmButtonText: 'Continuar'
       });
 
+      // ✅ Autologin tras registro → marca sesión y guarda usuario
+      if (typeof _marcarSesion === 'function') _marcarSesion(true);
+      else window.__sessionOK = true;
+
+      try {
+        sessionStorage.setItem('usuario', JSON.stringify({
+          id: data.id,
+          email: data.email,
+          nombre: data.nombre || data.email
+        }));
+      } catch {}
+
       // Tras autologin del back:
       document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
       try { await iniciarZonaPrivada?.(); } catch {}
       try { await checkAccountStatus?.(); } catch {}
+
+      // Cierra/oculta secciones de registro/login y muestra la app
+      document.getElementById('seccion-login')?.classList.add('oculto');
+      document.getElementById('seccion-registro')?.classList.add('oculto');
+      document.getElementById('usuario')?.setAttribute('style','display:none;');
+
+      if (typeof ocultarSplash === 'function') {
+        ocultarSplash(() => {
+          document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+          if (typeof enforceAuthView === 'function') enforceAuthView();
+        });
+      } else {
+        document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+        if (typeof enforceAuthView === 'function') enforceAuthView();
+      }
+
+      // Limpia el formulario de registro (por si queda en el DOM)
+      document.getElementById('form-registro')?.reset();
 
     } catch (err) {
       console.error('Registro error:', err);
