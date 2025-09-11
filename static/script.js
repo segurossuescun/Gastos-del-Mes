@@ -157,7 +157,6 @@ function aplicarConfiguracion(cfgIn) {
     el.style.color = colorSecundario;
   });
 
-  // Labels formularios
   ["#form-ingresos","#form-bills","#form-egresos","#form-egresos-personales","#form-pagos"]
     .forEach(sel => {
       document.querySelectorAll(`${sel} label`).forEach(el => {
@@ -165,10 +164,7 @@ function aplicarConfiguracion(cfgIn) {
       });
     });
 
-  // Títulos secundarios
   document.querySelectorAll(".titulo-secundario").forEach(el => el.style.color = colorSecundario);
-
-  // Texto tarjetas
   document.querySelectorAll(".tarjeta-resumen").forEach(el => el.style.color = colorTitulo);
 
   // Logo
@@ -200,9 +196,7 @@ function aplicarConfiguracion(cfgIn) {
   const tIni = cfg.tarjetaResumen.colorInicio;
   const tFin = cfg.tarjetaResumen.colorFinal;
   document.querySelectorAll("#resumen-ingresos, #resumen-bills, #resumen-egresos, #resumen-pagos, #detalle-resumen")
-    .forEach(card => {
-      card.style.background = `linear-gradient(to right, ${tIni}, ${tFin})`;
-    });
+    .forEach(card => { card.style.background = `linear-gradient(to right, ${tIni}, ${tFin})`; });
 
   // Catálogos (sin romper referencias)
   replaceArray(
@@ -224,11 +218,9 @@ function aplicarConfiguracion(cfgIn) {
   replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
   replaceArray(configMediosPago,        cfg.medios_pago        || []);
 
-  // Refrescar selects
   try { actualizarSelectsVistas('todos'); } catch {}
 }
 
-// ==== aplicar configuracion segura ==== //
 let __cfgAppliedSig = null;
 function aplicarConfiguracionSegura(cfg, who = 'unknown') {
   try {
@@ -240,14 +232,10 @@ function aplicarConfiguracionSegura(cfg, who = 'unknown') {
     __cfgAppliedSig = sig;
     console.log('Aplicando configuración (%s):', who, cfg);
     aplicarConfiguracion(cfg);
-
-    // (Opcional, si temes orden de carga)
-    // try { actualizarSelectsVistas('todos'); } catch {}
   } catch (err) {
     console.error('aplicarConfiguracionSegura error:', err);
   }
 }
-
   // 2) Logo ....................................................
   document.querySelectorAll(".logo-izquierda").forEach(img => {
     if (cfg.logo && cfg.logo.trim() !== "") {
