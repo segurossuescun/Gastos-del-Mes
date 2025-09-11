@@ -236,60 +236,6 @@ function aplicarConfiguracionSegura(cfg, who = 'unknown') {
     console.error('aplicarConfiguracionSegura error:', err);
   }
 }
-  // 2) Logo ....................................................
-  document.querySelectorAll(".logo-izquierda").forEach(img => {
-    if (cfg.logo && cfg.logo.trim() !== "") {
-      img.src = cfg.logo;
-      img.style.display = "inline-block";
-      img.style.filter = `drop-shadow(0 0 5px ${cfg.colores.boton_inicio})`;
-    } else {
-      img.style.display = "none";
-    }
-  });
-
-  // 3) Botones (gradiente) .....................................
-  const bIni = cfg.colores.boton_inicio;
-  const bFin = cfg.colores.boton_fin;
-  const grad = `linear-gradient(to right, ${bIni}, ${bFin})`;
-  document.querySelectorAll("button:not(.icon-btn)").forEach(btn => {
-    btn.style.backgroundImage = grad;
-    btn.style.backgroundColor = "transparent";
-    btn.style.color = "#fff";
-  });
-  const root = document.documentElement.style;
-  root.setProperty('--btn-inicio', bIni);
-  root.setProperty('--btn-fin', bFin);
-  root.setProperty('--btn-gradient', grad);
-
-  // 4) Tarjetas resumen (gradiente) ............................
-  const tIni = cfg.tarjetaResumen.colorInicio;
-  const tFin = cfg.tarjetaResumen.colorFinal;
-  document
-    .querySelectorAll("#resumen-ingresos, #resumen-bills, #resumen-egresos, #resumen-pagos, #detalle-resumen")
-    .forEach(card => { card.style.background = `linear-gradient(to right, ${tIni}, ${tFin})`; });
-
-  // 5) Catálogos globales (sin romper referencias) .............
-  replaceArray(
-    configFuentesIngresos,
-    Array.from(new Set((cfg.ingresos_fuentes || []).map(s => String(s).trim()).filter(Boolean)))
-  );
-  replaceArray(
-    configPersonas,
-    (typeof dedupePersonas === 'function')
-      ? dedupePersonas((cfg.personas || []).map(p => (typeof normalizaPersona === 'function' ? normalizaPersona(p) : p)))
-      : (cfg.personas || [])
-  );
-  replaceArray(
-    configBills,
-    (typeof limpiarBillsConPersonasInvalidas === 'function')
-      ? limpiarBillsConPersonasInvalidas(cfg.bills || [], configPersonas)
-      : (cfg.bills || [])
-  );
-  replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
-  replaceArray(configMediosPago,        cfg.medios_pago        || []);
-
-  // 6) Refrescar selects de vistas .............................
-  if (typeof actualizarSelectsVistas === 'function') actualizarSelectsVistas();
 
 // =============================
 // 3) STATE
