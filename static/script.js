@@ -706,10 +706,11 @@ function enforceAuthView() {
     contenido.style.opacity = '1';
   }
 
-  if (u?.email) {
+  if (u?.email && window.__sessionOK === true) {   // ← añade este flag
     _marcarSesion(true);
-    mostrarZonaPrivada(); // no cargar módulos aquí; usa requireAuth en BOOT
+    mostrarZonaPrivada();                          // no cargar módulos aquí
   } else {
+    _marcarSesion(false);
     mostrarPantallaLogin();
   }
 }
@@ -3000,68 +3001,78 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---- Registro (una sola vez) ----
-  const formRegistro = $('form-registro');
-  if (formRegistro && !formRegistro.dataset.bound) {
-    formRegistro.dataset.bound = '1';
-    let submitting = false;
+const formRegistro = $('form-registro');
+if (formRegistro && !formRegistro.dataset.bound) {
+  formRegistro.dataset.bound = '1';
+  let submitting = false;
 
-    formRegistro.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (submitting) return;
-      submitting = true;
+  formRegistro.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+    submitting = true;
 
-      const nombre    = $('registro-nombre')?.value?.trim() || '';
-      const usuario   = usuarioInput?.value?.trim().toLowerCase() || '';
-      const dominio   = $('registro-dominio')?.value || '@gmail.com';
-      const password  = $('registro-password')?.value || '';
-      const email     = usuario.includes('@') ? usuario : `${usuario}${dominio}`;
+    const nombre   = $('registro-nombre')?.value?.trim() || '';
+    const usuario  = usuarioInput?.value?.trim().toLowerCase() || '';
+    const dominio  = $('registro-dominio')?.value || '@gmail.com';
+    const password = $('registro-password')?.value || '';
+    const email    = usuario.includes('@') ? usuario : `${usuario}${dominio}`;
 
-      const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,16}$/;
-      if (!usuario || !regex.test(password)) {
-        await Swal?.fire({
-          icon: 'error',
-          title: 'Revisa tus datos',
-          text: 'Usuario y contraseña válidos (8–16, mayúsc/minúsc/número/símbolo)',
-        });
-        submitting = false;
-        return;
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,16}$/;
+    if (!usuario || !regex.test(password)) {
+      await Swal?.fire({
+        icon: 'error',
+        title: 'Revisa tus datos',
+        text: 'Usuario y contraseña válidos (8–16, mayúsc/minúsc/número/símbolo)',
+      });
+      submitting = false;
+      return;
+    }
+
+    const btn = formRegistro.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.dataset.txt = btn.textContent; btn.textContent = 'Creando cuenta…'; }
+
+    try {
+      const resp = await fetch('/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, email, password })
+      });
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || data?.ok === false) {
+        const msg = data?.error || `Error ${resp.status}`;
+        await Swal?.fire({ icon:'error', title:'No pudimos registrar', text: msg });
+        return; // ⛔️ aquí NO seguimos (nada de marcar sesión)
       }
 
-      const btn = formRegistro.querySelector('button[type="submit"]');
-      if (btn) { btn.disabled = true; btn.dataset.txt = btn.textContent; btn.textContent = 'Creando cuenta…'; }
+      await Swal?.fire({
+        icon:'success',
+        title:'🎉 ¡Cuenta creada!',
+        text:'Tu prueba gratuita ya comenzó.',
+        confirmButtonText:'Continuar'
+      });
 
-      try {
-        const resp = await fetch('/registro', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, email, password })
-        });
-        const data = await resp.json().catch(() => ({}));
+      // ✅ Login real (valida cookie/sesión en backend)
+      await doLogin(email, password);
 
-        if (!resp.ok || data?.ok === false) {
-          const msg = data?.error || `Error ${resp.status}`;
-          await Swal?.fire({ icon:'error', title:'No pudimos registrar', text: msg });
-          return;
-        }
+      // 🚦 Deja que el router decida qué mostrar
+      enforceAuthView?.();
 
-        await Swal?.fire({ icon:'success', title:'🎉 ¡Cuenta creada!', text:'Tu prueba gratuita ya comenzó.' });
+      // (opcional) avisos de trial
+      try { await checkAccountStatus?.(); } catch {}
 
-        // === ÚNICO flujo post-registro ===
-        // guarda sesión y enruta
-        try { sessionStorage.setItem('usuario', JSON.stringify({ email, nombre: nombre || email })); } catch {}
-        if (typeof enforceAuthView === 'function') enforceAuthView();
-        if (typeof iniciarZonaPrivada === 'function') iniciarZonaPrivada();
+      // Limpia el form
+      formRegistro.reset();
 
-        formRegistro.reset();
-      } catch (err) {
-        console.error('Registro error:', err);
-        await Swal?.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
-      } finally {
-        submitting = false;
-        if (btn) { btn.disabled = false; btn.textContent = btn.dataset.txt || 'Crear cuenta'; }
-      }
-    });
-  }
+    } catch (err) {
+      console.error('Registro error:', err);
+      await Swal?.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
+    } finally {
+      submitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.txt || 'Crear cuenta'; }
+    }
+  });
+}
 
   // ---- Login (una sola vez) ----
   const formLogin = $('form-login');
