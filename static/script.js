@@ -2469,6 +2469,49 @@ function cargarYNormalizarEgresos(callback) {
       callback && callback();
     });
 }
+// === Anti–tormenta para /cargar_egresos ===
+(function deDupEgresos() {
+  // Guarda original si existe
+  const orig = window.cargarYNormalizarEgresos;
+  if (!orig || orig.__wrapped) return;
+
+  let inflight = null;       // promesa en vuelo
+  let lastOK   = 0;          // último éxito (ms)
+  const COOL   = 500;        // no más de 1 hit cada 500ms
+
+  function runOnce(cb) {
+    // si ya hay una petición en curso, cuélgate de ella
+    if (inflight) return inflight.finally(() => cb && cb());
+
+    // si acabamos de cargar hace nada, no golpees el server otra vez
+    const since = Date.now() - lastOK;
+    if (since < COOL) {
+      cb && setTimeout(cb, COOL - since);
+      return Promise.resolve();
+    }
+
+    inflight = new Promise((resolve) => {
+      try {
+        // llamamos al original, asegurando que SIEMPRE resolvemos
+        orig(() => {
+          try { lastOK = Date.now(); } catch {}
+          try { cb && cb(); } catch {}
+          resolve();
+        });
+      } catch (e) {
+        console.error('cargarYNormalizarEgresos original lanzó:', e);
+        try { cb && cb(); } catch {}
+        resolve();
+      }
+    }).finally(() => { inflight = null; });
+
+    return inflight;
+  }
+
+  function wrapped(cb) { return runOnce(cb); }
+  wrapped.__wrapped = true;
+  window.cargarYNormalizarEgresos = wrapped;
+})();
 
 // ==== MODAL DE CONFIGURACIÓN ==== //
 // ==== CARGAR EN EL MODAL ==== //
@@ -2989,16 +3032,43 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ---- Cerrar sesión (expuesto 1 sola vez) ----
-  if (!window.__cerrarSesionFn) {
-    window.__cerrarSesionFn = async function cerrarSesion() {
+  // ---- Cerrar sesión (robusto, 1 sola vez) ----
+(function bindLogout() {
+  // expón el nombre que el HTML espera
+  if (!window.cerrarSesion) {
+    window.cerrarSesion = async function cerrarSesion(e) {
+      try { e?.preventDefault?.(); } catch {}
+
+      // feedback rápido
       try {
-        await Swal?.fire({ title:'¡Hasta luego!', text:'Tu sesión ha sido cerrada.', icon:'info', timer: 1200, showConfirmButton:false });
+        await Swal?.fire({ title:'¡Hasta luego!', text:'Tu sesión ha sido cerrada.', icon:'info', timer: 900, showConfirmButton:false });
       } catch {}
+
+      // 1) backend: invalida cookie
+      try { await fetch('/logout', { method:'POST', credentials:'same-origin' }); } catch {}
+
+      // 2) frontend: limpia estado
       try { sessionStorage.removeItem('usuario'); } catch {}
-      location.reload();
+      if (typeof _marcarSesion === 'function') _marcarSesion(false);
+
+      // 3) vuelve a la vista pública (sin recargar si no quieres)
+      if (typeof mostrarPantallaLogin === 'function') {
+        mostrarPantallaLogin();
+      } else {
+        location.href = '/';
+      }
     };
   }
+
+  // ata el botón por id si existe y evita duplicados
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('cerrar-sesion-barra');
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', window.cerrarSesion);
+    }
+  }, { once:true });
+})();
 
   // ---- Registro (una sola vez) ----
 const formRegistro = $('form-registro');
@@ -4785,24 +4855,3 @@ async function cargarEgresos() {
   }
 }
 
-async function cargarEgresos() {
-  try {
-    await new Promise((resolve, reject) => {
-      try {
-        cargarYNormalizarEgresos(() => {
-          try { mostrarEgresos?.(); } finally { resolve(); }
-        });
-      } catch (e) {
-        reject(e);
-      }
-    });
-  } catch (err) {
-    if (String(err?.message || '').includes('401')) {
-      mostrarPantallaLogin?.();
-      if (Array.isArray(window.egresos)) egresos.length = 0;
-      mostrarEgresos?.();
-      return;
-    }
-    console.error('Error al cargar egresos:', err);
-  }
-}
