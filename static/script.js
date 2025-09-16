@@ -130,6 +130,70 @@ function mergeConDefecto(cfgIn) {
   };
 }
 
+// ===== Menú de vistas: creación/actualización segura =====
+function ensureMenuVistas(vistasOrdenadas = ["ingresos","bills","egresos","pagos"]) {
+  const menu = document.getElementById("menu-vistas");
+  if (!menu) return;
+
+  // Mapa simple vista -> etiqueta
+  const label = {
+    ingresos: "Ingresos",
+    bills:    "Bills",
+    egresos:  "Egresos",
+    pagos:    "Pagos"
+  };
+
+  // Crea botón si no existe
+  vistasOrdenadas.forEach(v => {
+    let btn = menu.querySelector(`button[data-vista="${v}"]`);
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.vista = v;
+      btn.className = "btn-vista";
+      btn.textContent = label[v] || v;
+      btn.addEventListener("click", () => {
+        // marca activo
+        menu.querySelectorAll('button[data-vista]').forEach(b => b.classList.toggle('is-active', b === btn));
+        // muestra la vista
+        if (typeof window.mostrarVista === "function") window.mostrarVista(v);
+        else (window.W?.mostrarVista)?.(v);
+      });
+      menu.appendChild(btn);
+    }
+  });
+}
+
+// Callbacks de estilado/muestreo ya existentes usan #menu-vistas button[data-vista].
+// Aseguramos que existan ANTES de esa lógica:
+const __aplicarConfiguracionOriginal = window.aplicarConfiguracion;
+window.aplicarConfiguracion = function(cfgIn){
+  const cfg = cfgIn || window.configActual || {};
+  // 1) Asegura menú según orden por defecto o cfg.vistas
+  const orden = Array.isArray(cfg.vistas) && cfg.vistas.length
+    ? cfg.vistas
+    : ["ingresos","bills","egresos","pagos"];
+  ensureMenuVistas(orden);
+
+  // 2) Delega en la función original para colores/gradientes/etc.
+  __aplicarConfiguracionOriginal?.(cfg);
+
+  // 3) Aplica visibilidad a los botones (por si cfg.vistas oculta alguno)
+  document.querySelectorAll("#menu-vistas button[data-vista]").forEach(btn => {
+    const v = btn.dataset.vista;
+    btn.style.display = orden.includes(v) ? "inline-block" : "none";
+  });
+
+  // 4) Selecciona como activa la primera vista disponible
+  const primero = orden[0];
+  if (primero) {
+    const menu = document.getElementById("menu-vistas");
+    menu?.querySelectorAll('button[data-vista]')
+      .forEach(b => b.classList.toggle('is-active', b.dataset.vista === primero));
+    (window.mostrarVista || window.W?.mostrarVista)?.(primero);
+  }
+};
+
 // =============================
 // 2) UI / THEME
 // =============================
@@ -230,8 +294,18 @@ function aplicarConfiguracionSegura(cfg, who = 'unknown') {
       return;
     }
     __cfgAppliedSig = sig;
+
+    // 🔐 deja la config accesible para cualquier otro módulo
+    window.configActual   = cfg;
+    window.configTemporal = cfg;
+
     console.log('Aplicando configuración (%s):', who, cfg);
     aplicarConfiguracion(cfg);
+
+    // 🧼 repintado seguro (espera al DOM un frame por si aún no existen los nodos)
+    requestAnimationFrame(() => {
+      try { actualizarSelectsVistas('todos'); } catch (e) { console.warn('actualizarSelectsVistas falló:', e); }
+    });
   } catch (err) {
     console.error('aplicarConfiguracionSegura error:', err);
   }
@@ -694,6 +768,7 @@ function mostrarZonaPrivada() {
   document.getElementById('zona-privada')?.setAttribute('style','display:block;');
   document.getElementById('barra-superior')?.setAttribute('style','display:flex;');
   document.getElementById('menu-vistas')?.setAttribute('style','display:flex;');
+  requestAnimationFrame(() => { try { actualizarSelectsVistas('todos'); } catch {} });
 }
 
 function enforceAuthView() {
@@ -1771,7 +1846,13 @@ if (!window.__authRegistroInit) {
 // ACTUALIZAR SELECTS DE TODAS LAS VISTAS
 // ==============================
 function actualizarSelectsVistas(vista = "todos") {
-  console.log("DEBUG: actualizarSelectsVistas()", vista);
+  console.log("DEBUG: actualizarSelectsVistas()", vista, {
+    fuentes: configFuentesIngresos.length,
+    bills: configBills.length,
+    personas: configPersonas.length,
+    egresosCat: configEgresosCategorias.length,
+    mediosPago: configMediosPago.length
+  });
   
   // INGRESOS //
 
