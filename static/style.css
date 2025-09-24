@@ -1914,4 +1914,19 @@ button.icon-btn{
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
+/* asegura que el contenedor principal muestre el login cuando NO hay sesión */
+body:not(.auth) #contenido-app {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* por si #usuario o secciones estaban ocultas por estilos previos */
+body:not(.auth) #usuario,
+body:not(.auth) #seccion-usuario,
+body:not(.auth) #seccion-login,
+body:not(.auth) #seccion-registro {
+  display: block !important;
+}
+
 

@@ -560,11 +560,14 @@
   </div>
 </main>
 
-<!-- 1) Flags de entorno + versión -->
+<!-- 1) Flags de entorno + versión (auto) -->
 <script>
-  window.__PROD__ = true;          // producción
-  window.__VERSION__ = "1.0.1";    // versión
-  // logs centralizados (opc.)
+  const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
+  // En local, forzamos NO prod. En hosting real, prod=true salvo que tú lo cambies.
+  window.__PROD__    = __LOCAL__ ? false : true;
+  window.__VERSION__ = "1.0.2";
+
+  // logs (silenciados en prod)
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
@@ -580,16 +583,26 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 
 <!-- 4) Tu app -->
-<script src="/static/script.js" defer></script>
+<script src="/static/script.js?v=1.0.2" defer></script>
+<link rel="stylesheet" href="/static/style.css?v=1.0.2">
 
 <script>
-  // Registro simple del SW (con versión para forzar update cuando publiques)
   if ('serviceWorker' in navigator) {
+    const esLocal = ['localhost','127.0.0.1'].includes(location.hostname);
+    const esProd  = !esLocal && (window.__PROD__ === true);
+
     window.addEventListener('load', () => {
-      const v = (window.__VERSION__ || '1.0.2');
-      navigator.serviceWorker.register(`/service-worker.js?v=${encodeURIComponent(v)}`)
-        .then(reg => console.log('SW registrado:', reg.scope))
-        .catch(err => console.error('SW error:', err));
+      if (esProd) {
+        const v = encodeURIComponent(window.__VERSION__ || '1.0.1');
+        navigator.serviceWorker.register(`/service-worker.js?v=${v}`)
+          .then(reg => console.log('[SW] registrado:', reg.scope))
+          .catch(err => console.error('[SW] error:', err));
+      } else {
+        // 🔴 DEV: NO registrar y además limpiar cualquier SW/caché previo
+        navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+        caches?.keys?.().then(keys => keys.forEach(k => caches.delete(k)));
+        console.log('[SW] DEV: sin service worker (unregistered + caches cleared)');
+      }
     });
   }
 </script>

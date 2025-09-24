@@ -1,4 +1,4 @@
-const CACHE_NAME = "gdm-v3";
+const CACHE_NAME = "gdm-v4";
 const PRECACHE = [
   "/", "/index.html",
   "/static/script.js",

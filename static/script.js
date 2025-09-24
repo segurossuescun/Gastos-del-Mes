@@ -1,40 +1,46 @@
 // =============================
-// 1) CONFIGURACIÓN & DEFAULTS
+// CONFIGURACIÓN POR DEFECTO
 // =============================
-
-// configPorDefecto
 const configPorDefecto = {
   colores: {
     fondo: "#f9f9f9",
     boton_inicio: "#9a27f7",
     boton_fin: "#e762d5",
+
     // la tarjeta va adentro de colores (así la guarda el backend)
     tarjetaResumen: { colorInicio: "#fa9be2", colorFinal: "#ffffff" }
   },
+
   fuentes: {
     titulo: "Gochi Hand",
     colorTitulo: "#553071",
     secundario: "Arial",
     colorSecundario: "#8b68b0"
   },
+
   logo: "",
   vistas: ["ingresos", "bills", "egresos", "pagos"],
   ingresos_fuentes: ["💼 Trabajo", "🛒 Tienda"],
+
   personas: [
     { nombre: "Persona1", telefono: "+1234567890" },
     { nombre: "Persona2", telefono: "+0987654321" }
   ],
+
   // 👇 nombres que coincide con columnas del backend
   bills_conf: [
     { nombre: "Luz",  personas: ["Persona1", "Persona2"] },
     { nombre: "Agua", personas: ["Persona1"] }
   ],
+
   egresos_conf: [
     { categoria: "🍔 Comida", subcategorias: ["Restaurante", "Supermercado"] }
   ],
+
   medios_pago: [
     { medio: "💳 Tarjeta", submedios: ["Crédito", "Débito"] }
   ],
+
   // útil para la vista de pagos
   pagos_config: {
     bills: ["Luz", "Agua"],
@@ -43,9 +49,15 @@ const configPorDefecto = {
     submediosPorMedio: { "💳 Tarjeta": ["Crédito", "Débito"] }
   }
 };
+
 window.configPorDefecto = configPorDefecto; // opcional pero útil
 
-// replaceArray (util in-place para arrays)
+// --- Guard global: evita ReferenceError si la llaman antes de definirla real ---
+if (typeof window.mostrarZonaPrivada !== 'function') {
+  window.mostrarZonaPrivada = function () { /* stub temporal; se reemplaza más abajo */ };
+}
+
+// === Util: reemplazo in-place para arrays (mantiene la MISMA referencia) ===
 (function (global) {
   function replaceArray(target, next) {
     if (!Array.isArray(target)) {
@@ -55,10 +67,11 @@ window.configPorDefecto = configPorDefecto; // opcional pero útil
     if (!Array.isArray(next)) next = [];
     target.splice(0, target.length, ...next);
   }
-  global.replaceArray = replaceArray; // disponible globalmente
+  global.replaceArray = replaceArray; // ← disponible en todo el script
 })(typeof window !== "undefined" ? window : globalThis);
 
-// normalizarConfigEntrante(cfg)
+// --- Helpers de config ---------------------------------------------
+// 1) Normaliza nombres/estructuras legacy que puedan venir de la BD o de localStorage
 function normalizarConfigEntrante(cfg) {
   const out = { ...(cfg || {}) };
 
@@ -67,21 +80,23 @@ function normalizarConfigEntrante(cfg) {
     out.tarjetaResumen = out.colores.tarjetaResumen;
     try { delete out.colores.tarjetaResumen; } catch {}
   }
-  // tolerancia por variantes de nombre
+
+  // tolerancia por si vino el nombre "tarjetaresumen" o "tarjeta_resumen"
   if (!out.tarjetaResumen && out.tarjetaresumen) out.tarjetaResumen = out.tarjetaresumen;
   if (!out.tarjetaResumen && out.tarjeta_resumen) out.tarjetaResumen = out.tarjeta_resumen;
 
-  // mapear nombres de BD a claves de front
+  // si por alguna razón el backend envió bills_conf/egresos_conf (nombres de BD),
+  // mapeamos a las claves que usa el front.
   if (!out.bills && Array.isArray(out.bills_conf)) out.bills = out.bills_conf;
   if (!out.egresos_categorias && Array.isArray(out.egresos_conf)) out.egresos_categorias = out.egresos_conf;
 
-  // pagos_config → pagos
+  // pagos_config → pagos (nombre del front)
   if (!out.pagos && out.pagos_config) out.pagos = out.pagos_config;
 
   return out;
 }
 
-// mergeConDefecto(cfgIn)
+// 2) Mezcla con valores por defecto para que jamás falte nada
 function mergeConDefecto(cfgIn) {
   const defaults = {
     colores: {
@@ -130,81 +145,16 @@ function mergeConDefecto(cfgIn) {
   };
 }
 
-// ===== Menú de vistas: creación/actualización segura =====
-function ensureMenuVistas(vistasOrdenadas = ["ingresos","bills","egresos","pagos"]) {
-  const menu = document.getElementById("menu-vistas");
-  if (!menu) return;
-
-  // Mapa simple vista -> etiqueta
-  const label = {
-    ingresos: "Ingresos",
-    bills:    "Bills",
-    egresos:  "Egresos",
-    pagos:    "Pagos"
-  };
-
-  // Crea botón si no existe
-  vistasOrdenadas.forEach(v => {
-    let btn = menu.querySelector(`button[data-vista="${v}"]`);
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.type = "button";
-      btn.dataset.vista = v;
-      btn.className = "btn-vista";
-      btn.textContent = label[v] || v;
-      btn.addEventListener("click", () => {
-        // marca activo
-        menu.querySelectorAll('button[data-vista]').forEach(b => b.classList.toggle('is-active', b === btn));
-        // muestra la vista
-        if (typeof window.mostrarVista === "function") window.mostrarVista(v);
-        else (window.W?.mostrarVista)?.(v);
-      });
-      menu.appendChild(btn);
-    }
-  });
-}
-
-// Callbacks de estilado/muestreo ya existentes usan #menu-vistas button[data-vista].
-// Aseguramos que existan ANTES de esa lógica:
-const __aplicarConfiguracionOriginal = window.aplicarConfiguracion;
-window.aplicarConfiguracion = function(cfgIn){
-  const cfg = cfgIn || window.configActual || {};
-  // 1) Asegura menú según orden por defecto o cfg.vistas
-  const orden = Array.isArray(cfg.vistas) && cfg.vistas.length
-    ? cfg.vistas
-    : ["ingresos","bills","egresos","pagos"];
-  ensureMenuVistas(orden);
-
-  // 2) Delega en la función original para colores/gradientes/etc.
-  __aplicarConfiguracionOriginal?.(cfg);
-
-  // 3) Aplica visibilidad a los botones (por si cfg.vistas oculta alguno)
-  document.querySelectorAll("#menu-vistas button[data-vista]").forEach(btn => {
-    const v = btn.dataset.vista;
-    btn.style.display = orden.includes(v) ? "inline-block" : "none";
-  });
-
-  // 4) Selecciona como activa la primera vista disponible
-  const primero = orden[0];
-  if (primero) {
-    const menu = document.getElementById("menu-vistas");
-    menu?.querySelectorAll('button[data-vista]')
-      .forEach(b => b.classList.toggle('is-active', b.dataset.vista === primero));
-    (window.mostrarVista || window.W?.mostrarVista)?.(primero);
-  }
-};
-
-// =============================
-// 2) UI / THEME
-// =============================
+// 3) ÚNICA función aplicarConfiguracion (blindada y completa)
 function aplicarConfiguracion(cfgIn) {
+  // normaliza + defaults
   const cfg = mergeConDefecto(normalizarConfigEntrante(cfgIn || {}));
   console.log("Aplicando configuración:", cfg);
 
-  // Fondo
+  // === Fondo general ===
   document.body.style.background = cfg.colores.fondo;
 
-  // Fuentes / colores
+  // === Fuentes / colores de texto ===
   const colorTitulo     = cfg.fuentes.colorTitulo;
   const colorSecundario = cfg.fuentes.colorSecundario;
 
@@ -217,21 +167,34 @@ function aplicarConfiguracion(cfgIn) {
   });
 
   document.querySelectorAll(".texto-secundario, p, span").forEach(el => {
-    if (el.closest('.card-header')) return;
+    if (el.closest('.card-header')) return; // no tocar encabezado de tarjeta
     el.style.color = colorSecundario;
   });
 
-  ["#form-ingresos","#form-bills","#form-egresos","#form-egresos-personales","#form-pagos"]
-    .forEach(sel => {
-      document.querySelectorAll(`${sel} label`).forEach(el => {
-        el.style.color = colorSecundario;
-      });
+  // --- Labels en formularios
+  [
+    "#form-ingresos",
+    "#form-bills",
+    "#form-egresos",
+    "#form-egresos-personales",
+    "#form-pagos",
+  ].forEach(sel => {
+    document.querySelectorAll(`${sel} label`).forEach(el => {
+      el.style.color = colorSecundario;
     });
+  });
 
-  document.querySelectorAll(".titulo-secundario").forEach(el => el.style.color = colorSecundario);
-  document.querySelectorAll(".tarjeta-resumen").forEach(el => el.style.color = colorTitulo);
+  // --- Títulos secundarios
+  document.querySelectorAll(".titulo-secundario").forEach(el => {
+    el.style.color = colorSecundario;
+  });
 
-  // Logo
+  // --- Texto de tarjetas flotantes
+  document.querySelectorAll(".tarjeta-resumen").forEach(el => {
+    el.style.color = colorTitulo;
+  });
+
+  // === Logo ===
   document.querySelectorAll(".logo-izquierda").forEach(img => {
     if (cfg.logo && cfg.logo.trim() !== "") {
       img.src = cfg.logo;
@@ -242,82 +205,108 @@ function aplicarConfiguracion(cfgIn) {
     }
   });
 
-  // Botones (gradiente)
+  // === Botones (gradiente) ===
   const bIni = cfg.colores.boton_inicio;
   const bFin = cfg.colores.boton_fin;
   const grad = `linear-gradient(to right, ${bIni}, ${bFin})`;
+
   document.querySelectorAll("button:not(.icon-btn)").forEach(btn => {
     btn.style.backgroundImage = grad;
     btn.style.backgroundColor = "transparent";
     btn.style.color = "#fff";
   });
+
   const root = document.documentElement.style;
   root.setProperty('--btn-inicio', bIni);
   root.setProperty('--btn-fin', bFin);
   root.setProperty('--btn-gradient', grad);
 
-  // Tarjetas resumen (gradiente)
+  // === Tarjetas resumen (gradiente) ===
   const tIni = cfg.tarjetaResumen.colorInicio;
   const tFin = cfg.tarjetaResumen.colorFinal;
   document.querySelectorAll("#resumen-ingresos, #resumen-bills, #resumen-egresos, #resumen-pagos, #detalle-resumen")
-    .forEach(card => { card.style.background = `linear-gradient(to right, ${tIni}, ${tFin})`; });
+    .forEach(card => {
+      card.style.background = `linear-gradient(to right, ${tIni}, ${tFin})`;
+    });
 
-  // Catálogos (sin romper referencias)
-  replaceArray(
-    configFuentesIngresos,
-    Array.from(new Set((cfg.ingresos_fuentes || []).map(s => String(s).trim()).filter(Boolean)))
-  );
-  replaceArray(
-    configPersonas,
-    (typeof dedupePersonas === 'function')
-      ? dedupePersonas((cfg.personas || []).map(p => (typeof normalizaPersona === 'function' ? normalizaPersona(p) : p)))
-      : (cfg.personas || [])
-  );
-  replaceArray(
-    configBills,
-    (typeof limpiarBillsConPersonasInvalidas === 'function')
-      ? limpiarBillsConPersonasInvalidas(cfg.bills || [], configPersonas)
-      : (cfg.bills || [])
-  );
-  replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
-  replaceArray(configMediosPago,        cfg.medios_pago        || []);
+// === Catálogos globales (actualizando SIN romper referencias) ===
+replaceArray(
+  configFuentesIngresos,
+  Array.from(new Set((cfg.ingresos_fuentes || []).map(s => String(s).trim()).filter(Boolean)))
+);
 
-  try { actualizarSelectsVistas('todos'); } catch {}
+replaceArray(
+  configPersonas,
+  (typeof dedupePersonas === 'function')
+    ? dedupePersonas((cfg.personas || []).map(p => (typeof normalizaPersona === 'function' ? normalizaPersona(p) : p)))
+    : (cfg.personas || [])
+);
+
+replaceArray(
+  configBills,
+  (typeof limpiarBillsConPersonasInvalidas === 'function')
+    ? limpiarBillsConPersonasInvalidas(cfg.bills || [], configPersonas)
+    : (cfg.bills || [])
+);
+
+replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
+replaceArray(configMediosPago,        cfg.medios_pago        || []);
+
+// ✅ refresca UI
+if (typeof actualizarSelectsVistas === 'function') actualizarSelectsVistas();
+
 }
 
-let __cfgAppliedSig = null;
-function aplicarConfiguracionSegura(cfg, who = 'unknown') {
-  try {
-    const sig = JSON.stringify(cfg);
-    if (__cfgAppliedSig === sig) {
-      console.debug('CFG igual, no reaplico (%s)', who);
-      return;
+// --- Auth helpers ---
+function isLoggedIn() {
+  const u = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+  return !!u.email;
+}
+
+function enforceAuthView() {
+  const u = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+  const logged = !!u.email;
+
+  const contenido = document.getElementById('contenido-app');
+  if (contenido) {
+    contenido.style.display = 'block';
+    contenido.style.visibility = 'visible';
+    contenido.style.opacity = '1';
+  }
+
+  if (logged) {
+    if (typeof window.mostrarZonaPrivada === 'function') {
+      window.mostrarZonaPrivada(u);
+    } else {
+      // Fallback mínimo si aún no está definida
+      document.getElementById('usuario')?.setAttribute('style','display:none;');
+      document.getElementById('zona-privada')?.setAttribute('style','display:block;');
+      document.getElementById('barra-superior')?.setAttribute('style','display:flex;');
+      document.getElementById('menu-vistas')?.setAttribute('style','display:flex;');
     }
-    __cfgAppliedSig = sig;
-
-    // 🔐 deja la config accesible para cualquier otro módulo
-    window.configActual   = cfg;
-    window.configTemporal = cfg;
-
-    console.log('Aplicando configuración (%s):', who, cfg);
-    aplicarConfiguracion(cfg);
-
-    // 🧼 repintado seguro (espera al DOM un frame por si aún no existen los nodos)
-    requestAnimationFrame(() => {
-      try { actualizarSelectsVistas('todos'); } catch (e) { console.warn('actualizarSelectsVistas falló:', e); }
-    });
-  } catch (err) {
-    console.error('aplicarConfiguracionSegura error:', err);
+  } else {
+    if (typeof window.mostrarVistaUsuario === 'function') {
+      window.mostrarVistaUsuario();
+    } else {
+      // Fallback mínimo si aún no está definida
+      document.getElementById('zona-privada')?.setAttribute('style','display:none;');
+      document.getElementById('barra-superior')?.setAttribute('style','display:none;');
+      document.getElementById('menu-vistas')?.setAttribute('style','display:none;');
+      document.getElementById('usuario')?.setAttribute('style','display:block;');
+      document.getElementById('seccion-usuario')?.setAttribute('style','display:block;');
+      document.getElementById('seccion-registro')?.setAttribute('style','display:block;');
+      document.getElementById('seccion-login')?.setAttribute('style','display:block;');
+    }
   }
 }
 
 // =============================
-// 3) STATE
+// VARIABLES GLOBALES
 // =============================
-const W = (typeof window !== "undefined" ? window : globalThis);
-
 let configTemporal = {};
 let configActual = {};
+
+const W = (typeof window !== "undefined" ? window : globalThis);
 
 const configFuentesIngresos   = [];
 const configBills             = [];
@@ -340,618 +329,7 @@ W.configPersonas          = configPersonas;
 W.configEgresosCategorias = configEgresosCategorias;
 W.configMediosPago        = configMediosPago;
 
-// Gate de sesión (global)
-window.__sessionOK = false;
-
-// Endpoints protegidos
-window.RUTAS_PRIVADAS = new Set([
-  '/cargar_configuracion','/guardar_configuracion','/restablecer_configuracion',
-  '/cargar_perfil','/guardar_perfil',
-  '/cargar_ingresos','/guardar_ingreso','/eliminar_ingreso',
-  '/cargar_bills','/guardar_bill','/eliminar_bill',
-  '/cargar_egresos','/guardar_egreso','/eliminar_egreso',
-  '/cargar_pagos','/guardar_pago','/eliminar_pago'
-]);
-
-function _marcarSesion(on) {
-  window.__sessionOK = !!on;
-  try { document.body.classList.toggle('is-auth', !!on); } catch {}
-}
-
-// =============================
-// 4) HELPEERS GENERICOS 📝
-// =============================
-// ==== Generales ===== //
-function formatoLegible(fechaRaw) {
-  if (!fechaRaw) return "sin fecha";
-  const d = new Date(fechaRaw);
-  if (isNaN(d)) return fechaRaw;
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(d);
-}
-
-function normalizarTelefono(raw) {
-  if (!raw) return "";
-  let t = String(raw).trim();
-
-  // deja solo dígitos y '+'
-  t = t.replace(/[^\d+]/g, "");
-
-  // quita '+' o '00' inicial → dejamos solo dígitos
-  if (t.startsWith("+")) t = t.slice(1);
-  if (t.startsWith("00")) t = t.slice(2);
-
-  // si es de 10 dígitos (ej. US sin código) → anteponer 1
-  if (!t.startsWith("1") && t.length === 10) t = "1" + t;
-
-  // muy corto = inválido para wa.me
-  if (t.length < 11) return "";
-  return t;
-}
-function dedupePersonas(arr) {
-  // quita duplicados por NOMBRE (ignora mayúsculas/espacios). GANA la ÚLTIMA
-  const mp = new Map(arr.map(p => [p.nombre.trim().toLowerCase(), p]));
-  return [...mp.values()];
-}
-
-function personasActuales() {
-  if (Array.isArray(configTemporal?.personas) && configTemporal.personas.length) return configTemporal.personas;
-  if (Array.isArray(W.configPersonas)   && W.configPersonas.length)   return W.configPersonas;
-  if (Array.isArray(configPersonas)          && configPersonas.length)          return configPersonas;
-  return [];
-}
-
-function buscarPersonaPorNombre(nombre) {
-  const n = (nombre || "").trim().toLowerCase();
-  return personasActuales().find(p => (p?.nombre || "").trim().toLowerCase() === n);
-}
-function normalizaPersona(p) {
-  return {
-    nombre: String(p?.nombre || '').trim(),
-    telefono: String(p?.telefono || '').trim(),
-    activa: (p?.activa === false) ? false : true,   // default: activa
-    archivado_en: p?.archivado_en || null
-  };
-}
-function getPersonasVigentes() {
-  return (configPersonas || []).filter(p => p?.activa !== false);
-}
-function limpiarBillsConPersonasInvalidas(bills, personas) {
-  const set = new Set((personas || []).map(p => (p.nombre || '').trim().toLowerCase()));
-  return (bills || []).map(b => ({
-    nombre: String(b?.nombre || '').trim(),
-    personas: (b?.personas || [])
-      .map(n => String(n).trim())
-      .filter(n => set.has(n.toLowerCase()))
-  }));
-}
-
-// ---- Helpers de toast (reusar en ingresos/bills/egresos/pagos) ----
-function toastOk(title){
-  if (W.Swal) {
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title,
-      showConfirmButton: false,
-      timer: 2500,
-      timerProgressBar: true,
-    });
-  } else {
-    alert(title);
-  }
-}
-function toastErr(title){
-  if (W.Swal) {
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'error',
-      title,
-      showConfirmButton: false,
-      timer: 3000,
-      timerProgressBar: true,
-    });
-  } else {
-    alert(title);
-  }
-}
-
-async function borrarColeccion(urlCargar, extraerArray, urlEliminar, mapPayload) {
-  try {
-    const r = await fetch(urlCargar);
-    const data = await r.json().catch(() => ({}));
-    const items = extraerArray(data) || [];
-    for (const it of items) {
-      const payload = mapPayload(it);
-      await fetch(urlEliminar, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => {}); // tolerante
-    }
-  } catch (e) {
-    console.warn('borrarColeccion fallo:', urlCargar, e);
-  }
-}
-
-// ===== UI-UTILS =====
-function setSelect(id, opciones = [], placeholder = "Seleccionar") {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.innerHTML = `<option value="">${placeholder}</option>` +
-    opciones.map(o => `<option value="${o}">${o}</option>`).join("");
-}
-function _safeArray(x, fb = []) {
-  return Array.isArray(x) ? x : (Array.isArray(fb) ? fb : []);
-}
-function _getCfgFuenteIngresos(cfgArg) {
-  const cfg = cfgArg && typeof cfgArg === 'object'
-    ? cfgArg
-    : (W.configActual || W.configTemporal || W.configPorDefecto || {});
-  // Soporta ambas estructuras: top-level e "otros.*"
-  const top = _safeArray(cfg.ingresos_fuentes);
-  const otros = _safeArray(cfg.otros?.ingresos_fuentes);
-  const def = _safeArray(W.configPorDefecto?.ingresos_fuentes, []);
-  return (top.length ? top : (otros.length ? otros : def)).map(s => String(s).trim()).filter(Boolean);
-}
-function resetIngresosSelects(cfgArg) {
-  const fuentes = Array.from(new Set(_getCfgFuenteIngresos(cfgArg)));
-
-  const select = document.getElementById("fuente-ingreso");
-  const filtro = document.getElementById("filtro-fuente-ingreso");
-
-  if (select) {
-    const current = ""; // queremos vaciar
-    select.innerHTML = `<option value="" disabled selected>Selecciona fuente</option>` +
-      fuentes.map(f => `<option value="${f}">${f}</option>`).join("");
-    if (current) select.value = current;
-  }
-  if (filtro) {
-    filtro.innerHTML = `<option value="">Todas</option>` +
-      fuentes.map(f => `<option value="${f}">${f}</option>`).join("");
-    filtro.value = ""; // 🔑 limpia el filtro
-  }
-
-  // Mantén la referencia global coherente
-  W.configFuentesIngresos = fuentes;
-}
-function _cfgSegura() {
-  // devuelve algo SIEMPRE (por lo menos {})
-  if (W.configActual && Object.keys(W.configActual).length) return W.configActual;
-  if (W.configTemporal && Object.keys(W.configTemporal).length) return W.configTemporal;
-  if (W.configPorDefecto && Object.keys(W.configPorDefecto).length) return W.configPorDefecto;
-  return {};
-}
-
-function limpiarYRepoblarSelects(cfgArg) {
-  const cfg = (cfgArg && typeof cfgArg === 'object') ? cfgArg : _cfgSegura();
-
-  const fuentesIngresos =
-    (Array.isArray(W.configFuentesIngresos) && W.configFuentesIngresos.length
-      ? W.configFuentesIngresos
-      : (Array.isArray(cfg.ingresos_fuentes) ? cfg.ingresos_fuentes : []));
-
-  const billsNombres =
-    Array.isArray(W.configBills) ? W.configBills.map(b => b.nombre) :
-    Array.isArray(cfg.bills) ? cfg.bills.map(b => b.nombre) :
-    Array.isArray(cfg.bills_conf) ? cfg.bills_conf.map(b => b.nombre) : [];
-
-  const personasNombres =
-    Array.isArray(W.configPersonas) ? W.configPersonas.map(p => p.nombre) :
-    Array.isArray(cfg.personas) ? cfg.personas.map(p => p.nombre) : [];
-
-  const categorias =
-    Array.isArray(W.configEgresosCategorias) ? W.configEgresosCategorias.map(c => c.categoria) :
-    Array.isArray(cfg.egresos_categorias) ? cfg.egresos_categorias.map(c => c.categoria) :
-    Array.isArray(cfg.egresos_conf) ? cfg.egresos_conf.map(c => c.categoria) : [];
-
-  const medios =
-    Array.isArray(W.configMediosPago) ? W.configMediosPago.map(m => m.medio) :
-    Array.isArray(cfg.medios_pago) ? cfg.medios_pago.map(m => m.medio) : [];
-
-  // INGRESOS
-  setSelect("fuente-ingreso", fuentesIngresos, "Selecciona fuente");
-  setSelect("filtro-fuente-ingreso", fuentesIngresos, "Todas");
-  const fMesIng = document.getElementById("filtro-mes-ingreso"); if (fMesIng) fMesIng.value = "";
-  const fFuen   = document.getElementById("filtro-fuente-ingreso"); if (fFuen) fFuen.value = "";
-
-  // BILLS
-  setSelect("bill-tipo", billsNombres, "Selecciona tipo");
-  setSelect("filtro-tipo-bill", billsNombres, "Todos");
-  const fMesBill = document.getElementById("filtro-mes-bill"); if (fMesBill) fMesBill.value = "";
-
-  // EGRESOS
-  setSelect("categoria-egreso", categorias, "Seleccionar");
-  setSelect("filtro-categoria-egreso", categorias, "Todas");
-  setSelect("medio-egreso", medios, "Seleccionar medio");
-  const fMesEgr = document.getElementById("filtro-mes-egreso"); if (fMesEgr) fMesEgr.value = "";
-
-  // PAGOS
-  setSelect("bill-pago", billsNombres, "Selecciona Bill");
-  setSelect("filtro-bill-pago", billsNombres, "Todos");
-  setSelect("persona-pago", personasNombres, "Selecciona persona");
-  setSelect("filtro-persona-pago", personasNombres, "Todas");
-  setSelect("medio-pago", medios, "Selecciona medio");
-
-  const subCont = document.getElementById("submedio-pago-container");
-  const subSel  = document.getElementById("submedio-pago");
-  if (subSel) subSel.innerHTML = `<option value="">(selecciona un medio)</option>`;
-  if (subCont) subCont.style.display = "none";
-
-  // notificar al resto
-  if (typeof actualizarSelectsVistas === "function") actualizarSelectsVistas("todos");
-}
-
-// ==== FUNCIONES AUXILIARES ==== //
-function setInput(id, valor) {
-  const el = document.getElementById(id);
-  if (el) el.value = valor;
-}
-// === UTILITARIO GLOBAL: obtiene el value de un input por ID y hace trim. === //
-function getVal(id) {
-  const el = document.getElementById(id);
-  return el ? el.value.trim() : "";
-}
-function guardarTelefonoDueno() {
-  const tel = getVal("input-telefono-dueno");
-  telefonoDueno = tel;
-  if (typeof configTemporal === 'object') configTemporal.telefono_dueno = tel;
-  toastOk?.("Número del dueño actualizado");
-}
-// ====UI-RESET ===== //
-function resetearListasUI() {
-  // vaciar contenedores de listas
-  const ids = ["lista-ingresos", "lista-bills", "lista-egresos-personales", "lista-pagos"];
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = "";
-  });
-
-  // vaciar resúmenes
-  ["resumen-ingresos","resumen-bills","resumen-egresos","resumen-pagos"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = "";
-  });
-
-  // destruir gráficos si existen
-  try { W.graficoIngresos && W.graficoIngresos.destroy(); W.graficoIngresos = null; } catch {}
-  try { W.grafico && W.grafico.destroy(); W.grafico = null; } catch {}
-  try { W.graficoPagos && W.graficoPagos.destroy(); W.graficoPagos = null; } catch {}
-
-  // ✅ limpiar filtros y notificar a los listeners
-  resetFiltrosYNotificar();
-}
-
-// Deja filtros en blanco y dispara eventos para que repinten las vistas
-function resetFiltrosYNotificar() {
-  const ids = [
-    "filtro-mes-ingreso","filtro-fuente-ingreso",
-    "filtro-mes-bill","filtro-tipo-bill","buscador-bills",
-    "filtro-mes-egreso","filtro-categoria-egreso",
-    "filtro-mes-pago","filtro-persona-pago","filtro-bill-pago"
-  ];
-
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    if (el.tagName === 'SELECT') {
-      if ([...el.options].some(o => o.value === '')) el.value = '';
-      else el.selectedIndex = 0;
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    } else {
-      el.value = '';
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  });
-}
-
-// =============================
-// 5) API 🌐 (stub)
-// =============================
-// === FETCH JSON ==== //
-async function fetchJSON(url, opts = {}, { silent401 = false } = {}) {
-  // Normaliza por si te pasan null
-  opts = opts || {};
-
-  // Gate: NO llamar rutas privadas si aún no hay sesión OK
-  try {
-    const rutasPriv = window.RUTAS_PRIVADAS || new Set();     // tolera que aún no esté seteado
-    const path      = new URL(url, location.origin).pathname; // soporta rutas relativas
-    if (!window.__sessionOK && rutasPriv.has(path)) {
-      console.info('⛔️ Bloqueado antes de sesión:', path);
-      return null;
-    }
-  } catch {}
-
-  const res = await fetch(url, {
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    ...opts,
-  });
-
-  // 401 → si es silencioso devolvemos null; si no, mostramos login y lanzamos
-  if (res.status === 401) {
-    if (silent401) return null;
-    try { mostrarPantallaLogin?.(); } catch {}
-    if (typeof _marcarSesion === 'function') _marcarSesion(false);
-    else window.__sessionOK = false;
-    throw new Error('HTTP 401');
-  }
-
-  if (!res.ok) throw new Error(`Fallo en ${url} (HTTP ${res.status})`);
-
-  const ctype = res.headers.get('content-type') || '';
-  return ctype.includes('application/json') ? res.json() : res.text();
-}
-
-// =============================
-// 6) AUTH / SESSION 🔐
-// =============================
-
-function isLoggedIn() {
-  const u = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-  return !!u.email;
-}
-function haySesion() {
-  try {
-    if (window.__sessionOK) return true; // runtime flag
-    return !!JSON.parse(sessionStorage.getItem('usuario') || 'null'); // persistencia
-  } catch {
-    return false;
-  }
-}
-function clienteActual() {
-  const ses = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-  return ses.email || '';
-}
-function ownerDisplay({ allowFallbackYo = false } = {}) {
-  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
-  const apodo = (perfil.apodo || '').trim();
-  if (apodo) return apodo;
-
-  if (allowFallbackYo) {
-    const ses = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-    return (ses.nombre || ses.email || 'Dueño').trim();
-  }
-  return '';
-}
-
-function getApodo() {
-  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
-  return (perfil.apodo || '').trim();
-}
-
-function getTelefonoDueno() {
-  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
-  return (perfil.telefono || window?.configTemporal?.telefono_dueno || '').trim();
-}
-
-let __mostrandoLogin401 = false;
-
-function mostrarPantallaLogin({ reason = "" } = {}) {
-  _marcarSesion(false);
-  try { sessionStorage.removeItem('usuario'); } catch {}
-
-  if (typeof ocultarSplash === 'function') ocultarSplash();
-
-  const modal = document.getElementById('modal-login');
-  if (modal) {
-    modal.classList.add('abierto');
-  } else {
-    document.getElementById('zona-privada')?.setAttribute('style','display:none;');
-    document.getElementById('barra-superior')?.setAttribute('style','display:none;');
-    document.getElementById('menu-vistas')?.setAttribute('style','display:none;');
-    document.getElementById('usuario')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-usuario')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-registro')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-login')?.setAttribute('style','display:block;');
-  }
-
-  if (typeof window.mostrarVistaUsuario === 'function') window.mostrarVistaUsuario();
-
-  if (reason === "401") {
-    if (__mostrandoLogin401) return;
-    __mostrandoLogin401 = true;
-    setTimeout(() => { __mostrandoLogin401 = false; }, 1500);
-  }
-}
-
-function mostrarZonaPrivada() {
-  document.getElementById('usuario')?.setAttribute('style','display:none;');
-  document.getElementById('zona-privada')?.setAttribute('style','display:block;');
-  document.getElementById('barra-superior')?.setAttribute('style','display:flex;');
-  document.getElementById('menu-vistas')?.setAttribute('style','display:flex;');
-  requestAnimationFrame(() => { try { actualizarSelectsVistas('todos'); } catch {} });
-}
-
-function enforceAuthView() {
-  const u = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-
-  const contenido = document.getElementById('contenido-app');
-  if (contenido) {
-    contenido.style.display = 'block';
-    contenido.style.visibility = 'visible';
-    contenido.style.opacity = '1';
-  }
-
-  if (u?.email && window.__sessionOK === true) {   // ← añade este flag
-    _marcarSesion(true);
-    mostrarZonaPrivada();                          // no cargar módulos aquí
-  } else {
-    _marcarSesion(false);
-    mostrarPantallaLogin();
-  }
-}
-
-// Exponer global (si el HTML usa onclick o otros módulos lo llaman)
-window.mostrarPantallaLogin = mostrarPantallaLogin;
-window.mostrarZonaPrivada   = mostrarZonaPrivada;
-window.enforceAuthView      = enforceAuthView;
-
-// ===== LOGIN / REGISTRO + avisos trial ==== //
-// Normaliza email: exige correo completo en login (no “usuario” suelto)
-function normalizarEmailLogin(valor) {
-  const v = String(valor || "").trim().toLowerCase();
-  if (!v) return "";
-  if (v.includes("@")) return v; // ya es correo
-  if (window.Swal) {
-    Swal.fire({
-      icon: "info",
-      title: "Escribe tu correo completo",
-      text: "Incluye @gmail.com, @hotmail.com, etc.",
-    });
-  }
-  return "";
-}
-
-// Lógica de login con mensajes de trial/paid
-async function doLogin(email, password) {
-  try {
-    const payload = { email, password };
-
-    // Usa el wrapper centralizado
-    const res = await fetch('/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const raw = await res.text();
-    let data = {};
-    try { data = JSON.parse(raw); } catch {}
-
-    if (!res.ok) {
-      if (res.status === 402) {
-        await Swal?.fire({
-          icon: 'error',
-          title: '⛔ Tu prueba terminó',
-          text: 'Para seguir usando la app, activa tu suscripción.',
-          confirmButtonText: 'Entendido'
-        });
-        return;
-      }
-      const msg = data?.error || `Error ${res.status}`;
-      await Swal?.fire({ icon: 'error', title: 'No pudimos iniciar sesión', text: msg });
-      return;
-    }
-
-    // ✅ Login OK → marca sesión y guarda usuario
-    if (typeof _marcarSesion === 'function') _marcarSesion(true);
-    else window.__sessionOK = true;
-
-    try {
-      sessionStorage.setItem('usuario', JSON.stringify({
-        id: data.id,
-        email: data.email,
-        nombre: data.nombre || data.email
-      }));
-    } catch {}
-
-    // Mensajes según plan/días
-    if (data.plan === 'trial') {
-      const days = data.days_left;
-      if (typeof days === 'number') {
-        if (days <= 3) {
-          await Swal?.fire({
-            icon: 'warning',
-            title: '⚠️ Tu prueba está por terminar',
-            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de acceso gratuito.`,
-            confirmButtonText: 'Vale'
-          });
-        } else {
-          await Swal?.fire({
-            icon: 'info',
-            title: '🎉 Prueba gratuita activa',
-            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de prueba. ¡Recuerda suscribirte!`,
-            confirmButtonText: 'Entendido'
-          });
-        }
-      }
-    } else if (data.plan === 'paid') {
-      await Swal?.fire({
-        icon: 'success',
-        title: '¡Gracias por suscribirte! 💜',
-        text: 'Tu acceso está activo.',
-        confirmButtonText: 'Continuar'
-      });
-    }
-
-    // 🚦 Enruta correctamente (sin tocar DOM directo aquí)
-    if (typeof enforceAuthView === 'function') enforceAuthView();
-
-    // Opcional: revisar días restantes al entrar
-    try { await checkAccountStatus?.(); } catch {}
-
-  } catch (err) {
-    console.error('Login error:', err);
-    await Swal?.fire({ icon: 'error', title: 'Ups', text: 'Error inesperado iniciando sesión.' });
-  }
-}
-
-// Aviso de días restantes al entrar (si ya logueado)
-async function checkAccountStatus() {
-  try {
-    // Usa el wrapper; silent401 evita popups si caducó la sesión
-    const data = await fetchJSON("/account_status", {}, { silent401: true });
-    if (!data || !data.ok) return;
-
-    const days = data.days_left;
-    if (days === null) return; // paid → nada
-    if (days < 0) {
-      await Swal?.fire({
-        icon: "error",
-        title: "⛔ Tu prueba terminó",
-        text: "Necesitas suscribirte para seguir usando la app.",
-        confirmButtonText: "Entendido"
-      });
-      return;
-    }
-    if (days <= 3) {
-      await Swal?.fire({
-        icon: "warning",
-        title: "⚠️ Tu prueba está por terminar",
-        text: `Te quedan ${days} día${days !== 1 ? "s" : ""} de acceso gratuito.`,
-        confirmButtonText: "Vale"
-      });
-    }
-  } catch (err) {
-    console.error("Error verificando estado de cuenta:", err);
-  }
-}
-async function cargarConfiguracion() {
-  try {
-    const cfg = await fetchJSON('/cargar_configuracion', { method: 'GET' }, { silent401: true });
-    if (!cfg) return;
-    aplicarConfiguracionSegura(cfg, 'cargarConfiguracion');
-  } catch (e) {
-    console.error('Error al cargar configuración:', e);
-  }
-}
-
-// =============================
-//  7 FINANZAS / DISPONIBLE 💵
-// =============================
-// ==== CAMBIO DE VISTA ==== //
-W.mostrarVista = function (idVista) {
-  document.querySelectorAll(".vista").forEach(vista => {
-    vista.style.display = "none";
-  });
-
-  const vistaActiva = document.getElementById(idVista);
-  if (vistaActiva) vistaActiva.style.display = "block";
-
-  // Ahora solo una llamada global
-  actualizarSelectsVistas();
-};
-window.mostrarVista = W.mostrarVista;
-
+// === helpers compartidos para mes y disponible ===
 // --- Mes actual en formato YYYY-MM ---
 function mesActualYYYYMM() {
   const d = new Date();
@@ -1065,98 +443,696 @@ function disponibleMes(mesYYMM, done) {
   }));
 })();
 
-function refrescarDisponibleGlobal() {
-  const paneles = document.querySelectorAll('[data-disponible-panel]');
-  if (!paneles.length) return;
+// =============================
+// HELPERs
+// =============================
+function formatoLegible(fechaRaw) {
+  if (!fechaRaw) return "sin fecha";
+  const d = new Date(fechaRaw);
+  if (isNaN(d)) return fechaRaw;
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(d);
+}
 
-  paneles.forEach(panel => {
-    const sourceId = panel.getAttribute('data-mes-source') || '';
-    const mesSel = sourceId ? (document.getElementById(sourceId)?.value || '') : '';
-    disponibleMes(mesSel, ({ nombreMes, ingresos, egresos, disponible }) => {
-      panel.innerHTML = `
-        💵 <strong>Disponible</strong> en <em>${nombreMes}</em>:
-        <strong>$${(disponible || 0).toFixed(2)}</strong>
-        <small style="display:block;opacity:.7">
-          Ingresos $${(ingresos||0).toFixed(2)} — Egresos $${(egresos||0).toFixed(2)}
-        </small>
-      `;
+// Compat: mantiene el mismo nombre que ya usas en todo el código
+function ownerDisplay({ allowFallbackYo = false } = {}) {
+  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
+  const apodo = (perfil.apodo || '').trim();
+  if (apodo) return apodo;
+
+  if (allowFallbackYo) {
+    const ses = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+    return (ses.nombre || ses.email || 'Dueño').trim();
+  }
+  return '';
+}
+
+function getApodo() {
+  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
+  return (perfil.apodo || '').trim();
+}
+
+function getTelefonoDueno() {
+  const perfil = JSON.parse(sessionStorage.getItem('perfil') || '{}');
+  return (perfil.telefono || window?.configTemporal?.telefono_dueno || '').trim();
+}
+
+function clienteActual() {
+  const ses = JSON.parse(sessionStorage.getItem('usuario') || '{}');
+  return ses.email || '';
+}
+function normalizarTelefono(raw) {
+  if (!raw) return "";
+  let t = String(raw).trim();
+
+  // deja solo dígitos y '+'
+  t = t.replace(/[^\d+]/g, "");
+
+  // quita '+' o '00' inicial → dejamos solo dígitos
+  if (t.startsWith("+")) t = t.slice(1);
+  if (t.startsWith("00")) t = t.slice(2);
+
+  // si es de 10 dígitos (ej. US sin código) → anteponer 1
+  if (!t.startsWith("1") && t.length === 10) t = "1" + t;
+
+  // muy corto = inválido para wa.me
+  if (t.length < 11) return "";
+  return t;
+}
+function dedupePersonas(arr) {
+  // quita duplicados por NOMBRE (ignora mayúsculas/espacios). GANA la ÚLTIMA
+  const mp = new Map(arr.map(p => [p.nombre.trim().toLowerCase(), p]));
+  return [...mp.values()];
+}
+
+function personasActuales() {
+  if (Array.isArray(configTemporal?.personas) && configTemporal.personas.length) return configTemporal.personas;
+  if (Array.isArray(W.configPersonas)   && W.configPersonas.length)   return W.configPersonas;
+  if (Array.isArray(configPersonas)          && configPersonas.length)          return configPersonas;
+  return [];
+}
+
+function buscarPersonaPorNombre(nombre) {
+  const n = (nombre || "").trim().toLowerCase();
+  return personasActuales().find(p => (p?.nombre || "").trim().toLowerCase() === n);
+}
+function normalizaPersona(p) {
+  return {
+    nombre: String(p?.nombre || '').trim(),
+    telefono: String(p?.telefono || '').trim(),
+    activa: (p?.activa === false) ? false : true,   // default: activa
+    archivado_en: p?.archivado_en || null
+  };
+}
+function getPersonasVigentes() {
+  return (configPersonas || []).filter(p => p?.activa !== false);
+}
+function limpiarBillsConPersonasInvalidas(bills, personas) {
+  const set = new Set((personas || []).map(p => (p.nombre || '').trim().toLowerCase()));
+  return (bills || []).map(b => ({
+    nombre: String(b?.nombre || '').trim(),
+    personas: (b?.personas || [])
+      .map(n => String(n).trim())
+      .filter(n => set.has(n.toLowerCase()))
+  }));
+}
+
+// --- Gate de sesión (global)
+window.__sessionOK = false;
+
+window.RUTAS_PRIVADAS = new Set([
+  '/cargar_configuracion','/guardar_configuracion','/restablecer_configuracion',
+  '/cargar_perfil','/guardar_perfil',
+  '/cargar_ingresos','/guardar_ingreso','/eliminar_ingreso',
+  '/cargar_bills','/guardar_bill','/eliminar_bill',
+  '/cargar_egresos','/guardar_egreso','/eliminar_egreso',
+  '/cargar_pagos','/guardar_pago','/eliminar_pago'
+]);
+
+function _marcarSesion(on) {
+  window.__sessionOK = !!on;
+  try { document.body.classList.toggle('is-auth', !!on); } catch {}
+}
+
+
+// ---- Helpers de toast (reusar en ingresos/bills/egresos/pagos) ----
+function toastOk(title){
+  if (W.Swal) {
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title,
+      showConfirmButton: false,
+      timer: 2500,
+      timerProgressBar: true,
     });
-  });
+  } else {
+    alert(title);
+  }
+}
+function toastErr(title){
+  if (W.Swal) {
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'error',
+      title,
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+    });
+  } else {
+    alert(title);
+  }
 }
 
-function wireDisponibleAuto() {
-  // 1) Enlazar carga/normalización de egresos
-  const prevCargar = window.cargarYNormalizarEgresos;
-  if (typeof prevCargar === 'function' && !prevCargar._wiredDisponible) {
-    window.cargarYNormalizarEgresos = function(cb) {
-      prevCargar(() => {
-        try { refrescarDisponibleGlobal(); } catch {}
-        cb && cb();
-      });
-    };
-    window.cargarYNormalizarEgresos._wiredDisponible = true;
-  }
-
-  // 2) Enlazar cambio de vista
-  const prevMostrarVista = window.mostrarVista;
-  if (typeof prevMostrarVista === 'function' && !prevMostrarVista._wiredDisponible) {
-    window.mostrarVista = function(idVista) {
-      prevMostrarVista(idVista);
-      try { refrescarDisponibleGlobal(); } catch {}
-    };
-    window.mostrarVista._wiredDisponible = true;
-  }
-
-  // 3) Enlazar aplicar configuración
-  const prevAplicarCfg = window.aplicarConfiguracion;
-  if (typeof prevAplicarCfg === 'function' && !prevAplicarCfg._wiredDisponible) {
-    window.aplicarConfiguracion = function(cfg) {
-      prevAplicarCfg(cfg);
-      try { refrescarDisponibleGlobal(); } catch {}
-    };
-    window.aplicarConfiguracion._wiredDisponible = true;
-  }
-
-  // 4) Enlazar altas/bajas de ingresos/egresos
-  ['guardarIngreso','eliminarIngreso','guardarEgreso','eliminarEgreso'].forEach(fn => {
-    const prev = window[fn];
-    if (typeof prev === 'function' && !prev?._wiredDisponible) {
-      window[fn] = function(...args) {
-        const r = prev.apply(this, args);
-        Promise.resolve(r).finally(() => { try { refrescarDisponibleGlobal(); } catch {} });
-        return r;
-      };
-      window[fn]._wiredDisponible = true;
+async function borrarColeccion(urlCargar, extraerArray, urlEliminar, mapPayload) {
+  try {
+    const r = await fetch(urlCargar);
+    const data = await r.json().catch(() => ({}));
+    const items = extraerArray(data) || [];
+    for (const it of items) {
+      const payload = mapPayload(it);
+      await fetch(urlEliminar, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {}); // tolerante
     }
-  });
+  } catch (e) {
+    console.warn('borrarColeccion fallo:', urlCargar, e);
+  }
+}
+function setSelect(id, opciones = [], placeholder = "Seleccionar") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `<option value="">${placeholder}</option>` +
+    opciones.map(o => `<option value="${o}">${o}</option>`).join("");
+}
+function _safeArray(x, fb = []) {
+  return Array.isArray(x) ? x : (Array.isArray(fb) ? fb : []);
+}
+function _getCfgFuenteIngresos(cfgArg) {
+  const cfg = cfgArg && typeof cfgArg === 'object'
+    ? cfgArg
+    : (W.configActual || W.configTemporal || W.configPorDefecto || {});
+  // Soporta ambas estructuras: top-level e "otros.*"
+  const top = _safeArray(cfg.ingresos_fuentes);
+  const otros = _safeArray(cfg.otros?.ingresos_fuentes);
+  const def = _safeArray(W.configPorDefecto?.ingresos_fuentes, []);
+  return (top.length ? top : (otros.length ? otros : def)).map(s => String(s).trim()).filter(Boolean);
+}
+function resetIngresosSelects(cfgArg) {
+  const fuentes = Array.from(new Set(_getCfgFuenteIngresos(cfgArg)));
 
-  // 5) Enlazar cambios de filtros de mes
-  ['filtro-mes-ingreso','filtro-mes-egreso','filtro-mes-bill','filtro-mes-pago'].forEach(id => {
+  const select = document.getElementById("fuente-ingreso");
+  const filtro = document.getElementById("filtro-fuente-ingreso");
+
+  if (select) {
+    const current = ""; // queremos vaciar
+    select.innerHTML = `<option value="" disabled selected>Selecciona fuente</option>` +
+      fuentes.map(f => `<option value="${f}">${f}</option>`).join("");
+    if (current) select.value = current;
+  }
+  if (filtro) {
+    filtro.innerHTML = `<option value="">Todas</option>` +
+      fuentes.map(f => `<option value="${f}">${f}</option>`).join("");
+    filtro.value = ""; // 🔑 limpia el filtro
+  }
+
+  // Mantén la referencia global coherente
+  W.configFuentesIngresos = fuentes;
+}
+// === Sesión en memoria (bandera rápida)
+let __sessionOK = false;
+
+function haySesion() {
+  try {
+    if (window.__sessionOK) return true; // runtime flag
+    return !!JSON.parse(sessionStorage.getItem('usuario') || 'null'); // persistencia
+  } catch {
+    return false;
+  }
+}
+
+// --- Guard contra re-aplicar la misma config ---
+let __cfgAppliedSig = null;
+
+function aplicarConfiguracionSegura(cfg, who = 'unknown') {
+  try {
+    const sig = JSON.stringify(cfg);
+    if (__cfgAppliedSig === sig) {
+      console.debug('CFG igual, no reaplico (%s)', who);
+      return;
+    }
+    __cfgAppliedSig = sig;
+    console.log('Aplicando configuración (%s):', who, cfg);
+    aplicarConfiguracion(cfg); // <-- tu función existente
+  } catch (err) {
+    console.error('aplicarConfiguracionSegura error:', err);
+  }
+}
+
+// =============================
+// HELPERS: selects tras un reset
+// =============================
+function _cfgSegura() {
+  // devuelve algo SIEMPRE (por lo menos {})
+  if (W.configActual && Object.keys(W.configActual).length) return W.configActual;
+  if (W.configTemporal && Object.keys(W.configTemporal).length) return W.configTemporal;
+  if (W.configPorDefecto && Object.keys(W.configPorDefecto).length) return W.configPorDefecto;
+  return {};
+}
+
+function limpiarYRepoblarSelects(cfgArg) {
+  const cfg = (cfgArg && typeof cfgArg === 'object') ? cfgArg : _cfgSegura();
+
+  const fuentesIngresos =
+    (Array.isArray(W.configFuentesIngresos) && W.configFuentesIngresos.length
+      ? W.configFuentesIngresos
+      : (Array.isArray(cfg.ingresos_fuentes) ? cfg.ingresos_fuentes : []));
+
+  const billsNombres =
+    Array.isArray(W.configBills) ? W.configBills.map(b => b.nombre) :
+    Array.isArray(cfg.bills) ? cfg.bills.map(b => b.nombre) :
+    Array.isArray(cfg.bills_conf) ? cfg.bills_conf.map(b => b.nombre) : [];
+
+  const personasNombres =
+    Array.isArray(W.configPersonas) ? W.configPersonas.map(p => p.nombre) :
+    Array.isArray(cfg.personas) ? cfg.personas.map(p => p.nombre) : [];
+
+  const categorias =
+    Array.isArray(W.configEgresosCategorias) ? W.configEgresosCategorias.map(c => c.categoria) :
+    Array.isArray(cfg.egresos_categorias) ? cfg.egresos_categorias.map(c => c.categoria) :
+    Array.isArray(cfg.egresos_conf) ? cfg.egresos_conf.map(c => c.categoria) : [];
+
+  const medios =
+    Array.isArray(W.configMediosPago) ? W.configMediosPago.map(m => m.medio) :
+    Array.isArray(cfg.medios_pago) ? cfg.medios_pago.map(m => m.medio) : [];
+
+  // INGRESOS
+  setSelect("fuente-ingreso", fuentesIngresos, "Selecciona fuente");
+  setSelect("filtro-fuente-ingreso", fuentesIngresos, "Todas");
+  const fMesIng = document.getElementById("filtro-mes-ingreso"); if (fMesIng) fMesIng.value = "";
+  const fFuen   = document.getElementById("filtro-fuente-ingreso"); if (fFuen) fFuen.value = "";
+
+  // BILLS
+  setSelect("bill-tipo", billsNombres, "Selecciona tipo");
+  setSelect("filtro-tipo-bill", billsNombres, "Todos");
+  const fMesBill = document.getElementById("filtro-mes-bill"); if (fMesBill) fMesBill.value = "";
+
+  // EGRESOS
+  setSelect("categoria-egreso", categorias, "Seleccionar");
+  setSelect("filtro-categoria-egreso", categorias, "Todas");
+  setSelect("medio-egreso", medios, "Seleccionar medio");
+  const fMesEgr = document.getElementById("filtro-mes-egreso"); if (fMesEgr) fMesEgr.value = "";
+
+  // PAGOS
+  setSelect("bill-pago", billsNombres, "Selecciona Bill");
+  setSelect("filtro-bill-pago", billsNombres, "Todos");
+  setSelect("persona-pago", personasNombres, "Selecciona persona");
+  setSelect("filtro-persona-pago", personasNombres, "Todas");
+  setSelect("medio-pago", medios, "Selecciona medio");
+
+  const subCont = document.getElementById("submedio-pago-container");
+  const subSel  = document.getElementById("submedio-pago");
+  if (subSel) subSel.innerHTML = `<option value="">(selecciona un medio)</option>`;
+  if (subCont) subCont.style.display = "none";
+
+  // notificar al resto
+  if (typeof actualizarSelectsVistas === "function") actualizarSelectsVistas("todos");
+}
+
+// =============================
+// LIMPIEZA DE LISTAS / FILTROS / CHARTS
+// =============================
+function resetearListasUI() {
+  // vaciar contenedores de listas
+  const ids = ["lista-ingresos", "lista-bills", "lista-egresos-personales", "lista-pagos"];
+  ids.forEach(id => {
     const el = document.getElementById(id);
-    if (el && !el.dataset.wiredDisponible) {
-      el.addEventListener('input', () => { try { refrescarDisponibleGlobal(); } catch {} });
-      el.dataset.wiredDisponible = '1';
-    }
+    if (el) el.innerHTML = "";
   });
 
-  // 6) Primer pintado
-  try { refrescarDisponibleGlobal(); } catch {}
+  // vaciar resúmenes
+  ["resumen-ingresos","resumen-bills","resumen-egresos","resumen-pagos"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = "";
+  });
+
+  // destruir gráficos si existen
+  try { W.graficoIngresos && W.graficoIngresos.destroy(); W.graficoIngresos = null; } catch {}
+  try { W.grafico && W.grafico.destroy(); W.grafico = null; } catch {}
+  try { W.graficoPagos && W.graficoPagos.destroy(); W.graficoPagos = null; } catch {}
+
+  // ✅ limpiar filtros y notificar a los listeners
+  resetFiltrosYNotificar();
+}
+
+// Deja filtros en blanco y dispara eventos para que repinten las vistas
+function resetFiltrosYNotificar() {
+  const ids = [
+    "filtro-mes-ingreso","filtro-fuente-ingreso",
+    "filtro-mes-bill","filtro-tipo-bill","buscador-bills",
+    "filtro-mes-egreso","filtro-categoria-egreso",
+    "filtro-mes-pago","filtro-persona-pago","filtro-bill-pago"
+  ];
+
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (el.tagName === 'SELECT') {
+      if ([...el.options].some(o => o.value === '')) el.value = '';
+      else el.selectedIndex = 0;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      el.value = '';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+}
+
+// --- Login overlay helper (ÚNICO) ---
+let __mostrandoLogin401 = false;
+function mostrarPantallaLogin({ reason = "" } = {}) {
+  if (__mostrandoLogin401) return;
+  __mostrandoLogin401 = true;
+
+  // Estado de sesión
+  try { _marcarSesion(false); } catch {}
+  window.__sessionOK = false;
+  try { sessionStorage.removeItem('usuario'); } catch {}
+  document.body.classList.remove('auth','is-auth');
+
+  // Accesibilidad: el login vive dentro de #contenido-app → NO debe estar aria-hidden
+  const root = document.getElementById('contenido-app');
+  if (root) {
+    root.style.setProperty('display','block','important');
+    root.style.visibility = 'visible';
+    root.style.opacity    = '1';
+    root.removeAttribute('aria-hidden');
+  }
+
+  // Oculta TODO lo privado (incluso si alguna vista quedó fuera de #zona-privada)
+  document.querySelectorAll('.vista, #ingresos, #bills, #egresos, #pagos, #detalle-resumen')
+    .forEach(n => n?.style?.setProperty('display','none','important'));
+  ['zona-privada','barra-superior','menu-vistas']
+    .forEach(id => document.getElementById(id)?.style?.setProperty('display','none','important'));
+
+  // Limpia “activo” en el menú
+  const menu = document.getElementById('menu-vistas');
+  menu?.querySelectorAll('button[data-vista]')?.forEach(b => b.classList.remove('is-active'));
+
+  // Muestra login/registro
+  ['usuario','seccion-usuario','seccion-login','seccion-registro']
+    .forEach(id => document.getElementById(id)?.style?.setProperty('display','block','important'));
+
+  // Modal de login (si existe)
+  const modal = document.getElementById('modal-login');
+  if (modal) modal.classList.add('abierto');
+
+  // Limpia inputs (si tienes estos helpers)
+  try { limpiarLoginUI?.(); limpiarRegistroUI?.(); } catch {}
+
+  // ⚠️ NO llames enforceAuthView aquí (puede volver a encender vistas privadas)
+
+  // Anti-doble disparo
+  setTimeout(() => { __mostrandoLogin401 = false; }, 1200);
+}
+
+// Exponer global (una sola vez)
+window.mostrarPantallaLogin = window.mostrarPantallaLogin || mostrarPantallaLogin;
+
+// =============================
+// FETCH JSON (gate de sesión + 401 amigable)
+// =============================
+async function fetchJSON(url, opts = {}, { silent401 = false } = {}) {
+  // Normaliza por si te pasan null
+  opts = opts || {};
+
+  // Gate: NO llamar rutas privadas si aún no hay sesión OK
+  try {
+    const rutasPriv = window.RUTAS_PRIVADAS || new Set();     // tolera que aún no esté seteado
+    const path      = new URL(url, location.origin).pathname; // soporta rutas relativas
+    if (!window.__sessionOK && rutasPriv.has(path)) {
+      console.info('⛔️ Bloqueado antes de sesión:', path);
+      return null;
+    }
+  } catch {}
+
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+
+  // 401 → si es silencioso devolvemos null; si no, mostramos login y lanzamos
+  if (res.status === 401) {
+    if (silent401) return null;
+    try { mostrarPantallaLogin?.(); } catch {}
+    if (typeof _marcarSesion === 'function') _marcarSesion(false);
+    else window.__sessionOK = false;
+    throw new Error('HTTP 401');
+  }
+
+  if (!res.ok) throw new Error(`Fallo en ${url} (HTTP ${res.status})`);
+
+  const ctype = res.headers.get('content-type') || '';
+  return ctype.includes('application/json') ? res.json() : res.text();
 }
 
 // =============================
-//  8       ROUTER 🧭
+// LOGIN / REGISTRO + avisos trial
 // =============================
 
+// Normaliza email: exige correo completo en login (no “usuario” suelto)
+function normalizarEmailLogin(valor) {
+  const v = String(valor || "").trim().toLowerCase();
+  if (!v) return "";
+  if (v.includes("@")) return v; // ya es correo
+  Swal.fire({
+    icon: "info",
+    title: "Escribe tu correo completo",
+    text: "Incluye @gmail.com, @hotmail.com, etc.",
+  });
+  return "";
+}
+
+// Lógica de login con mensajes de trial/paid
+async function doLogin(email, password) {
+  try {
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+
+    if (!res.ok) {
+      if (res.status === 402) {
+        await Swal.fire({
+          icon: 'error',
+          title: '⛔ Tu prueba terminó',
+          text: 'Para seguir usando la app, activa tu suscripción.',
+          confirmButtonText: 'Entendido'
+        });
+        return;
+      }
+      const msg = data?.error || `Error ${res.status}`;
+      Swal.fire({ icon: 'error', title: 'No pudimos iniciar sesión', text: msg });
+      return;
+    }
+
+    // ✅ Login OK → marca sesión y guarda usuario
+      if (typeof _marcarSesion === 'function') _marcarSesion(true);
+      else window.__sessionOK = true;
+
+      try {
+        sessionStorage.setItem('usuario', JSON.stringify({
+          id: data.id,
+          email: data.email,
+          nombre: data.nombre || data.email
+        }));
+      } catch {}
+
+    // Login OK: mostrar mensajes según plan/días
+    if (data.plan === 'trial') {
+      const days = data.days_left;
+      if (typeof days === 'number') {
+        if (days <= 3) {
+          await Swal.fire({
+            icon: 'warning',
+            title: '⚠️ Tu prueba está por terminar',
+            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de acceso gratuito.`,
+            confirmButtonText: 'Vale'
+          });
+        } else {
+          await Swal.fire({
+            icon: 'info',
+            title: '🎉 Prueba gratuita activa',
+            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de prueba. ¡Recuerda suscribirte para no perder acceso!`,
+            confirmButtonText: 'Entendido'
+          });
+        }
+      }
+    } else if (data.plan === 'paid') {
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Gracias por suscribirte! 💜',
+        text: 'Tu acceso está activo más allá de la prueba.',
+        confirmButtonText: 'Continuar'
+      });
+    }
+
+    // Cierra login y arranca zona privada (ajusta a tu flujo si ya tienes helpers)
+    document.getElementById('seccion-login')?.classList.add('oculto');
+    document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+
+    // Si tienes funciones de carga, úsalas:
+    try { await iniciarZonaPrivada?.(); } catch {}
+  
+  } catch (err) {
+    console.error('Login error:', err);
+    Swal.fire({ icon: 'error', title: 'Ups', text: 'Error inesperado iniciando sesión.' });
+  }
+}
+
+// Aviso de días restantes al entrar (si ya logueado)
+async function checkAccountStatus() {
+  try {
+    const res = await fetch("/account_status");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const days = data.days_left;
+    if (days === null) return;        // paid → nada
+    if (days < 0) {
+      await Swal.fire({
+        icon: "error",
+        title: "⛔ Tu prueba terminó",
+        text: "Necesitas suscribirte para seguir usando la app.",
+        confirmButtonText: "Entendido"
+      });
+      return;
+    }
+    if (days <= 3) {
+      await Swal.fire({
+        icon: "warning",
+        title: "⚠️ Tu prueba está por terminar",
+        text: `Te quedan ${days} día${days !== 1 ? "s" : ""} de acceso gratuito.`,
+        confirmButtonText: "Vale"
+      });
+    }
+  } catch (err) {
+    console.error("Error verificando estado de cuenta:", err);
+  }
+}
+
+// === Listeners de formularios ===
+
+// LOGIN
+(function wireLoginForm(){
+  const form = document.getElementById('form-login');
+  if (!form) { document.addEventListener('DOMContentLoaded', wireLoginForm, { once:true }); return; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailInput = document.getElementById('login-usuario');
+    const passInput  = document.getElementById('login-password');
+    let email = normalizarEmailLogin(emailInput?.value);
+    const password = String(passInput?.value || "");
+    if (!email || !password) return;
+    await doLogin(email, password);
+  });
+})();
+
+// REGISTRO (usa tu input de usuario + select dominio)
+(function wireRegistroForm(){
+  const form = document.getElementById('form-registro');
+  if (!form) { document.addEventListener('DOMContentLoaded', wireRegistroForm, { once:true }); return; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre   = document.getElementById('registro-nombre')?.value?.trim() || "";
+    const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
+    const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
+    const password = document.getElementById('registro-password')?.value || "";
+
+    if (!usuario || !password) {
+      Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
+      return;
+    }
+    const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
+
+    try {
+      const res = await fetch('/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, email, password })
+      });
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch {}
+
+      if (!res.ok || data.ok === false) {
+        const msg = data?.error || `Error ${res.status}`;
+        Swal.fire({ icon:'error', title:'No pudimos registrar', text: msg });
+        return;
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: '🎉 ¡Cuenta creada!',
+        text: 'Tu prueba gratuita ya comenzó.',
+        confirmButtonText: 'Continuar'
+      });
+
+      // ✅ Autologin tras registro → marca sesión y guarda usuario
+      if (typeof _marcarSesion === 'function') _marcarSesion(true);
+      else window.__sessionOK = true;
+
+      try {
+        sessionStorage.setItem('usuario', JSON.stringify({
+          id: data.id,
+          email: data.email,
+          nombre: data.nombre || data.email
+        }));
+      } catch {}
+
+      // Tras autologin del back:
+      document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+      try { await iniciarZonaPrivada?.(); } catch {}
+      try { await checkAccountStatus?.(); } catch {}
+
+      // Cierra/oculta secciones de registro/login y muestra la app
+      document.getElementById('seccion-login')?.classList.add('oculto');
+      document.getElementById('seccion-registro')?.classList.add('oculto');
+      document.getElementById('usuario')?.setAttribute('style','display:none;');
+
+      if (typeof ocultarSplash === 'function') {
+        ocultarSplash(() => {
+          document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+          if (typeof enforceAuthView === 'function') enforceAuthView();
+        });
+      } else {
+        document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+        if (typeof enforceAuthView === 'function') enforceAuthView();
+      }
+
+      // Limpia el formulario de registro (por si queda en el DOM)
+      document.getElementById('form-registro')?.reset();
+
+    } catch (err) {
+      console.error('Registro error:', err);
+      Swal.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
+    }
+  });
+})();
+
 // =============================
-//  9       BOOTSTRAP 🚦
+// SPLASH
 // =============================
-// Marca el instante en que el splash "existe"
+
+let _splashOcultado = false;
+let _splashStartTs = 0;
+
+// marca el instante en que el splash "existe"
 document.addEventListener('DOMContentLoaded', () => {
   ocultarSplash._ts = performance.now();
 }, { once:true });
 
 function ocultarSplash(done) {
-  if (ocultarSplash._ran) return;
+  if (ocultarSplash._ran) return; 
   ocultarSplash._ran = true;
 
   const splash = document.getElementById('splash');
@@ -1167,17 +1143,16 @@ function ocultarSplash(done) {
   setTimeout(() => {
     if (!splash) { done?.(); return; }
 
+    // fade-out por CSS (ver 2) y fallback por si no hay transitionend
     splash.classList.add('splash-hide');
     splash.addEventListener('transitionend', () => {
       splash.remove();
       done?.();
     }, { once:true });
-
-    // Fallback por si no dispara transitionend
     setTimeout(() => { try { splash.remove(); } catch {} ; done?.(); }, 400);
   }, wait);
 }
-window.ocultarSplash = ocultarSplash;
+
 
 // Refresca TODO tras un reset del backend
 function refrescarUITrasReset(cfgDelBack = {}) {
@@ -1198,31 +1173,29 @@ function refrescarUITrasReset(cfgDelBack = {}) {
   pintarListasVacias();
 
   // 3) limpiar estado en memoria (vaciar EN SITIO y reexponer)
-  ingresos.length = 0;
-  egresos.length  = 0;
-  pagos.length    = 0;
-  bills.length    = 0;
+ingresos.length = 0;
+egresos.length  = 0;
+pagos.length    = 0;
+bills.length    = 0;
 
-  // cuelga las mismas referencias en todos lados
-  W.ingresos = ingresos;  window.ingresos = ingresos;
-  W.egresos  = egresos;   window.egresos  = egresos;
-  W.pagos    = pagos;     window.pagos    = pagos;
-  W.bills    = bills;     window.bills    = bills;
+// cuelga las mismas referencias en todos lados
+W.ingresos = ingresos;  window.ingresos = ingresos;
+W.egresos  = egresos;   window.egresos  = egresos;
+W.pagos    = pagos;     window.pagos    = pagos;
+W.bills    = bills;     window.bills    = bills;
 
-  try { ['ingresos','egresos','pagos','bills'].forEach(k => localStorage.removeItem(k)); } catch {}
+try { ['ingresos','egresos','pagos','bills'].forEach(k => localStorage.removeItem(k)); } catch {}
 
   // 4) actualizar snapshots y aplicar tema + catálogos
   configActual   = structuredClone(cfg);
   configTemporal = structuredClone(cfg);
-  (typeof aplicarConfiguracionSegura === 'function'
-    ? aplicarConfiguracionSegura(cfg, 'reset')
-    : aplicarConfiguracion(cfg));
+  aplicarConfiguracion(cfg);
 
   // 5) re-render vacío
-  try { mostrarIngresos?.(); } catch {}
-  try { mostrarBills?.();    } catch {}
-  try { mostrarEgresos?.();  } catch {}
-  try { mostrarPagos?.();    } catch {}
+  try { mostrarIngresos(); } catch {}
+  try { mostrarBills();    } catch {}
+  try { mostrarEgresos();  } catch {}
+  try { mostrarPagos();    } catch {}
 
   // 6) refrescar preview del logo del modal (si existe)
   const imgPreview = document.getElementById("preview-logo");
@@ -1231,7 +1204,6 @@ function refrescarUITrasReset(cfgDelBack = {}) {
     else { imgPreview.src = ""; imgPreview.style.display = "none"; }
   }
 }
-
 function pintarListasVacias() {
   const bloques = [
     ['lista-ingresos', '🪙 No hay ingresos registrados aún.'],
@@ -1245,7 +1217,9 @@ function pintarListasVacias() {
   }
 }
 
-// ==== Registrador ÚNICO de globals ==== //
+// =============================
+// Registrador ÚNICO de globals
+// =============================
 function registerGlobals() {
   // asegúrate de tener el contenedor
   window.W = window.W || {};
@@ -1295,15 +1269,200 @@ function registerGlobals() {
   }
 }
 
-// ==== serviceWorker ==== Ultimo todo lo demas antes //
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-      .then(reg => console.log('🎉 Service Worker registrado', reg.scope))
-      .catch(err => console.error('😢 Error al registrar SW', err));
-  }, { once: true });
+// =====================================
+// CARGAR Y NORMALIZAR EGRESOS (una vez)
+// =====================================
+let _egresosCargando = false;
+let _egresosListos   = false;
+
+function cargarYNormalizarEgresos(callback) {
+  // si ya los tenemos en memoria, usamos eso
+  if (_egresosListos && Array.isArray(egresos) && egresos.length > 0) {
+    callback && callback();
+    return;
+  }
+  if (_egresosCargando) {
+    // evita loops agresivos
+    setTimeout(() => { callback && callback(); }, 0);
+    return;
+  }
+  if (!isLoggedIn()) {
+  _egresosListos = true;
+  _egresosCargando = false;
+  callback && callback();
+  return;
 }
-// === (BOOT helper) Cargar config del usuario tras sesión OK === //
+  _egresosCargando = true;
+
+  fetchJSON('/cargar_egresos')   // 👈 usa el helper robusto
+    .then(payload => {
+      const lista = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload.egresos) ? payload.egresos : []);
+
+      const normalizados = (lista || []).map(e => {
+        let fecha = e?.fecha ? String(e.fecha) : "";
+        if (fecha.includes("T")) fecha = fecha.split("T")[0];
+        fecha = fecha.replace(/\//g, "-").slice(0, 10);
+        const montoNum = Number(String(e?.monto ?? 0).toString().replace(/[^0-9.-]+/g, ""));
+        return {
+          ...e,
+          fecha,
+          monto: isNaN(montoNum) ? 0 : montoNum
+        };
+      });
+
+      egresos.length = 0;
+      egresos.push(...normalizados);
+      window.egresos = egresos;
+
+      _egresosListos   = true;
+      _egresosCargando = false;
+      callback && callback();
+    })
+    .catch(err => {
+      const msg = String(err?.message || "");
+      // si es 401, mostramos login y NO seguimos spameando
+      if (msg.includes('HTTP 401')) {
+        document.getElementById('modal-login')?.classList.add('abierto');
+      } else {
+        console.error("Error cargando egresos:", err);
+        // opcional: toastErr?.('❌ No se pudieron cargar los egresos');
+      }
+      _egresosListos   = true;   // marcamos listo para no entrar en bucles
+      _egresosCargando = false;
+      callback && callback();
+    });
+}
+
+// =============================
+// CAMBIO DE VISTA
+// =============================
+W.mostrarVista = function (idVista) {
+  document.querySelectorAll(".vista").forEach(vista => {
+    vista.style.display = "none";
+  });
+
+  const vistaActiva = document.getElementById(idVista);
+  if (vistaActiva) vistaActiva.style.display = "block";
+
+  // Ahora solo una llamada global
+  actualizarSelectsVistas();
+};
+
+// =============================
+// MODAL DE CONFIGURACIÓN
+// =============================
+async function abrirModalConfiguracion() {
+  const cliente = clienteActual();
+
+  let data;
+  try {
+    data = cliente
+      ? await fetchJSON(`/cargar_configuracion?cliente=${encodeURIComponent(cliente)}`, { method: 'GET' }, { silent401: false })
+      : configPorDefecto;
+  } catch (err) {
+    // Si es 401 ya se mostró el login en fetchJSON; salimos sin abrir modal
+    if (String(err?.message).includes('401')) return;
+    console.error("❌ Error cargando configuración:", err);
+    data = {};
+  }
+
+  const base = data && Object.keys(data).length ? data : configPorDefecto;
+  const cfg  = mergeConDefecto(normalizarConfigEntrante(base));
+
+  // snapshots
+  configTemporal = structuredClone(cfg);
+  configActual   = structuredClone(cfg);
+
+  // Actualiza arrays SIN reasignar
+  replaceArray(
+    configFuentesIngresos,
+    Array.from(new Set((cfg.ingresos_fuentes || []).map(s => String(s).trim()).filter(Boolean)))
+  );
+
+  replaceArray(
+    configPersonas,
+    (typeof dedupePersonas === 'function')
+      ? dedupePersonas((cfg.personas || []).map(p => (typeof normalizaPersona === 'function' ? normalizaPersona(p) : p)))
+      : (cfg.personas || [])
+  );
+
+  replaceArray(
+    configBills,
+    (typeof limpiarBillsConPersonasInvalidas === 'function')
+      ? limpiarBillsConPersonasInvalidas(cfg.bills || [], configPersonas)
+      : (cfg.bills || [])
+  );
+
+  replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
+  replaceArray(configMediosPago,        cfg.medios_pago        || []);
+
+  // Reexponer referencias
+  W.configFuentesIngresos = configFuentesIngresos;
+  W.configBills           = configBills;
+  W.configPersonas        = configPersonas;
+  W.configMediosPago      = configMediosPago;
+
+  // Pintar el modal
+  try { cargarEnModal(configTemporal); } catch(e){ console.warn("cargarEnModal()", e); }
+  try { W.llenarSelectFuentes?.(); } catch{}
+  try { W.llenarSelectFuentesIngresos?.(); } catch{}
+  try { renderizarConfigPagos?.(); } catch{}
+  try { configTemporal.pagos && marcarChecksPagos?.(configTemporal.pagos); } catch{}
+
+  const modal = document.getElementById("modal-configuracion");
+  if (modal) modal.style.display = "flex";
+
+  // Solo refrescos ligeros (sin re-aplicar tema global desde aquí)
+  try { actualizarSelectsVistas?.(); }   catch(e){ console.warn("actualizarSelectsVistas()", e); }
+  try { wireDisponibleAuto?.(); }        catch(e){ console.warn("wireDisponibleAuto()", e); }
+  try { refrescarDisponibleGlobal?.(); } catch(e){ console.warn("refrescarDisponibleGlobal()", e); }
+}
+
+function cerrarModalConfiguracion() {
+  const modal = document.getElementById("modal-configuracion");
+  if (modal) modal.style.display = "none";
+}
+
+// =============================
+// SERVICE WORKER
+// =============================
+if ('serviceWorker' in navigator) {
+  W.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then(reg => console.log('🎉 Service Worker registrado', reg))
+      .catch(err => console.error('😢 Error al registrar SW', err));
+  });
+}
+
+// =============================
+// FUNCIONES AUXILIARES
+// =============================
+function setInput(id, valor) {
+  const el = document.getElementById(id);
+  if (el) el.value = valor;
+}
+
+// === UTILITARIO GLOBAL: obtiene el value de un input por ID y hace trim. ===
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : "";
+}
+
+function guardarTelefonoDueno() {
+  const tel = getVal("input-telefono-dueno");
+  telefonoDueno = tel;
+  if (typeof configTemporal === 'object') configTemporal.telefono_dueno = tel;
+  alert("Número del dueño actualizado: " + tel);
+}
+
+// ---------------------------------------------------------------------------
+// OPCIONAL: Si decides mantener cargarConfigYAplicar, hazla "segura":
+// - No aplica defaults si /cargar_configuracion falla o devuelve 401
+// - Úsala SOLO tras sesión OK (por ejemplo dentro de iniciarZonaPrivada)
+// ---------------------------------------------------------------------------
 let __cfgLoaded = false;
 async function cargarConfigYAplicar() {
   if (__cfgLoaded) return;  // evita dobles cargas para el mismo login
@@ -1332,132 +1491,166 @@ async function cargarConfigYAplicar() {
   aplicarConfiguracion(cfg);
 }
 
-// === SPLASH HELPERS === //
+// ---------------------------------------------------------------------------
+// Aplica cambios del modal en vivo (sin guardar en backend)
+// ---------------------------------------------------------------------------
+function aplicarConfiguracionDesdeModal() {
+  // 1) Vistas marcadas en el modal
+  const vistasSeleccionadas = Array.from(
+    document.querySelectorAll(".vista-checkbox:checked")
+  ).map(cb => cb.value);
 
-function ensureSplash() {
-  let splash = document.getElementById('splash');
-  if (!splash) {
-    splash = document.createElement('div');
-    splash.id = 'splash';
-    splash.innerHTML = `<img src="/static/fondos/logo.png" alt="Splash">`;
-    document.body.prepend(splash);
-  }
-  return splash;
-}
+  const vistasFinal = vistasSeleccionadas.length
+    ? vistasSeleccionadas
+    : (configActual?.vistas || []);
 
-function startSplashAnim() {
-  const splash = ensureSplash();
+  // 2) Lee selección de pagos del modal (si existe)
+  try { leerConfigPagosSeleccion?.(); } catch {}
 
-  const fireAnim = (el) => {
-    el.classList.remove('splash-anim');
-    void el.offsetWidth;                 // reflow para reiniciar animación
-    el.classList.add('splash-anim');
+  // 3) Construye la nueva config con lo que hay en el modal + arrays actuales
+  const nueva = {
+    colores: {
+      fondo: getVal("conf-fondo") || (configActual.colores?.fondo || "#f9f9f9"),
+      boton_inicio: getVal("conf-boton-inicio") || (configActual.colores?.boton_inicio || "#9a27f7"),
+      boton_fin: getVal("conf-boton-fin") || (configActual.colores?.boton_fin || "#e762d5"),
+    },
+    tarjetaResumen: {
+      colorInicio: getVal("conf-resumen-inicio") || (configActual.tarjetaResumen?.colorInicio || "#fa9be2"),
+      colorFinal: getVal("conf-resumen-fin") || (configActual.tarjetaResumen?.colorFinal || "#ffffff"),
+    },
+    fuentes: {
+      titulo: getVal("conf-fuente-titulo") || (configActual.fuentes?.titulo || "Gochi Hand"),
+      secundario: getVal("conf-fuente-cuerpo") || (configActual.fuentes?.secundario || "Arial"),
+      colorTitulo: getVal("conf-color-titulo") || (configActual.fuentes?.colorTitulo || "#553071"),
+      colorSecundario: getVal("conf-color-secundario") || (configActual.fuentes?.colorSecundario || "#8b68b0"),
+    },
+    logo: (typeof configTemporal?.logo === 'string' ? configTemporal.logo : (configActual.logo || "")),
+    vistas: vistasFinal,
+
+    // catálogos actuales (editados en modal con sus botones)
+    ingresos_fuentes: Array.isArray(configFuentesIngresos) ? [...configFuentesIngresos] : (configActual.ingresos_fuentes || []),
+    bills: Array.isArray(configBills) ? [...configBills] : (configActual.bills || []),
+    personas: Array.isArray(configPersonas) ? [...configPersonas] : (configActual.personas || []),
+    egresos_categorias: Array.isArray(configEgresosCategorias) ? [...configEgresosCategorias] : (configActual.egresos_categorias || []),
+    medios_pago: Array.isArray(configMediosPago) ? [...configMediosPago] : (configActual.medios_pago || []),
+
+    telefono_dueno: getVal("input-telefono-dueno") || configTemporal?.telefono_dueno || configActual?.telefono_dueno || "",
+    pagos: configTemporal?.pagos || configActual?.pagos || { bills: [], personas: [], medios: [], submediosPorMedio: {} }
   };
 
-  const img = splash.querySelector('img');
-  fireAnim(img || splash);               // preferimos animar <img>, si no, el contenedor
-}
+  // 4) Refresca estado en memoria
+  configTemporal = structuredClone(nueva);
+  configActual   = structuredClone(nueva);
 
-// Dispara cuando el DOM está listo y también en load
-document.addEventListener('DOMContentLoaded', startSplashAnim, { once:true });
-window.addEventListener('load', startSplashAnim, { once:true });
+  // 5) Aplica estilos/colores/fuentes/botones/tarjetas + repoblar selects
+  aplicarConfiguracion(nueva);
 
-// ===== BOOT DE LA APP ===== //
-async function iniciarZonaPrivada() {
-  // 1) Config primero (muchas vistas dependen de ella)
-  if (typeof cargarConfiguracion === 'function') {
-    try { await cargarConfiguracion(); } catch (e) { console.warn('cargarConfiguracion falló:', e); }
-  }
-
-  // 2) Lo demás en paralelo
-  const tareas = [];
-  if (typeof cargarBills === 'function')      tareas.push(cargarBills());
-  if (typeof cargarIngresos === 'function')   tareas.push(cargarIngresos());
-  if (typeof cargarEgresos === 'function')    tareas.push(cargarEgresos());
-  if (typeof cargarPagos === 'function')      tareas.push(cargarPagos());
-  if (typeof cargarPerfilEnUI === 'function') tareas.push(cargarPerfilEnUI());
-  await Promise.allSettled(tareas);
-
-  // 3) Post-procesos UI
-  aplanarListas?.();
-  marcarListasGrid?.();
-  wirePagosUI?.();
-  wireDisponibleAuto?.();
-  refrescarDisponibleGlobal?.();
-}
-
-async function boot() {
-  // a) Defaults públicos
-  try {
-    const cfg = await fetchJSON('/config_default', { method: 'GET' }, { silent401: true });
-    if (cfg) aplicarConfiguracionSegura(cfg, 'boot:config_default');
-  } catch (e) {
-    console.warn('No se pudo cargar config_default:', e);
-  }
-
-  // b) Sesión con try/catch (si hay error de red/500, no dejes el splash colgado)
-  let ses = null;
-  try {
-    ses = await fetchJSON('/session', { method: 'GET' }, { silent401: true });
-  } catch (e) {
-    console.error('Error consultando /session:', e);
-    _marcarSesion(false);
-    mostrarPantallaLogin?.();
-    requestAnimationFrame(() => ocultarSplash?.());
-    return;
-  }
-
-  // c) Sin usuario
-if (!ses || ses.ok === false || !ses.user) {
-  _marcarSesion(false);
-  // PRIMERO ocultamos el splash y LUEGO mostramos el login
-  ocultarSplash(() => {
-    mostrarPantallaLogin?.();
-    enforceAuthView?.();
+  // 6) Mostrar/ocultar botones del menú según vistas activas
+  document.querySelectorAll("#menu-vistas button[data-vista]").forEach(btn => {
+    const v = btn.dataset.vista;
+    btn.style.display = vistasFinal.includes(v) ? "inline-block" : "none";
   });
-  return;
+
+  // 7) Si hay vistas, muestra la primera
+  if (Array.isArray(vistasFinal) && vistasFinal.length) {
+    document.querySelectorAll(".vista").forEach(v => {
+      if (v.id === 'usuario') return; // no tocar el login
+      v.style.display = vistasFinal.includes(v.id) ? "block" : "none";
+    });
+    if (typeof window.mostrarVista === 'function') window.mostrarVista(vistasFinal[0]);
+  }
+
+  try { toastOk?.('Configuración aplicada (no guardada)'); } catch {}
 }
 
-// d) Autenticado
-_marcarSesion(true);
-const user = ses.user || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
-try { sessionStorage.setItem('usuario', JSON.stringify(user)); } catch {}
+// Si tu HTML llama onclick, expón al global:
+window.aplicarConfiguracionDesdeModal = aplicarConfiguracionDesdeModal;
 
-await iniciarZonaPrivada(); // carga datos
-// PRIMERO ocultamos el splash y LUEGO mostramos la zona privada (si no la mostraste antes)
-ocultarSplash(() => {
-  mostrarZonaPrivada?.(user);
-  checkAccountStatus?.();
-  enforceAuthView?.();
-});
+// ==============================
+// CARGAR EN EL MODAL (simplificado, sin preview en vivo)
+// ==============================
+function cargarEnModal(cfg) {
+  // snapshot para revertir si cierra sin guardar
+  copiaAntesDeAbrirGlobal = structuredClone(configActual);
+  seGuardoConfiguracion = false;
+
+  // === Rellenar inputs ===
+  setInput("conf-fondo", cfg.colores.fondo);
+  setInput("conf-boton-inicio", cfg.colores.boton_inicio);
+  setInput("conf-boton-fin", cfg.colores.boton_fin);
+  setInput("conf-resumen-inicio", cfg.tarjetaResumen.colorInicio);
+  setInput("conf-resumen-fin", cfg.tarjetaResumen.colorFinal);
+  setInput("conf-color-titulo", cfg.fuentes.colorTitulo);
+  setInput("conf-color-secundario", cfg.fuentes.colorSecundario);
+  setInput("conf-fuente-titulo", cfg.fuentes.titulo);
+  setInput("conf-fuente-cuerpo", cfg.fuentes.secundario);
+  setInput("input-telefono-dueno", cfg.telefono_dueno || "");
+  telefonoDueno = cfg.telefono_dueno || "";
+
+// === Logo preview dentro del modal ===
+const imgPreview = document.getElementById("preview-logo");
+if (imgPreview) {
+  if (cfg.logo && cfg.logo.trim() !== "") {
+    imgPreview.src = cfg.logo;          // 👈 variable correcta
+    imgPreview.style.display = "block";
+  } else {
+    imgPreview.src = "";
+    imgPreview.style.display = "none";
+  }
 }
 
-// --- registrar accesos globales ---
-registerGlobals(); // con la versión “segura” ya no hace falta el try/catch
+  // === ⚠️ EVITAR LISTENERS DUPLICADOS EN LAS CASILLAS DEL MODAL ===
+  // Usamos el contenedor de las casillas y marcamos que ya se añadió el listener.
+  const wrapper = document.getElementById("vistas-opciones");
+  if (wrapper && !wrapper.dataset.listener) {
+    document.querySelectorAll(".vista-checkbox").forEach(cb => {
+      cb.addEventListener("change", () => {
+        // 1️⃣ recojo qué vistas quedaron marcadas
+        const vistasSeleccionadas = Array.from(
+          document.querySelectorAll(".vista-checkbox:checked")
+        ).map(c => c.value);
 
-// 3) ÚNICO listener de arranque (asegúrate de no tener otro en el archivo)
-document.addEventListener('DOMContentLoaded', boot);
-// =============================
-//  10       EVENTS 🔗
-// =============================
-// ==== EVENTOS DOM para el modal ==== //
+        // 2️⃣ actualizo visibilidad de botones del menú
+        document.querySelectorAll("#menu-vistas button[data-vista]")
+          .forEach(btn => {
+            btn.style.display = vistasSeleccionadas.includes(btn.dataset.vista)
+              ? "inline-block"
+              : "none";
+          });
+
+        // 3️⃣ si hay al menos una, muestro sólo la primera
+        if (vistasSeleccionadas.length > 0) {
+          mostrarVista(vistasSeleccionadas[0]);
+        } else {
+          // si no queda ninguna, oculto todas
+          document.querySelectorAll(".vista").forEach(v => v.style.display = "none");
+        }
+
+        // 4️⃣ refresco el panel interno del modal
+        actualizarOpcionesEspecificas();
+      });
+    });
+
+    // Marcamos que ya agregamos los listeners (la próxima vez no se duplica)
+    wrapper.dataset.listener = "1";
+  }
+
+  // 3) Refresca las opciones del modal
+  actualizarOpcionesEspecificas();
+}
+
+//==============================
+// EVENTOS DOM para el modal
+// ==============================
 document.addEventListener("DOMContentLoaded", () => {
-  // ⚙️ Abrir modal de configuración
   const btnAbrir = document.getElementById("abrir-configuracion");
   if (btnAbrir) {
     btnAbrir.addEventListener("click", () => {
-      // Mejor usar tu helper que ya trae config del backend y pinta todo.
-      if (typeof abrirModalConfiguracion === 'function') {
-        abrirModalConfiguracion();
-      } else {
-        // Fallback mínimo si aún no está definida
-        cargarEnModal(configTemporal);
-        document.getElementById("modal-configuracion").style.display = "flex";
-      }
-    }, { once: false });
+      cargarEnModal(configTemporal);
+      document.getElementById("modal-configuracion").style.display = "flex";
+    });
   }
 
-  // 🖼️ Logo: preview inmediato y actualización de configTemporal
   const inputLogo = document.getElementById("conf-logo");
   const imgPreview = document.getElementById("preview-logo");
 
@@ -1468,36 +1661,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const base64 = ev.target.result;
-      // guarda en estado temporal
       configTemporal.logo = base64;
 
-      // preview dentro del modal
       if (imgPreview) {
         imgPreview.src = base64;
         imgPreview.style.display = "block";
       }
 
-      // refleja en la UI (logos de la barra)
       document.querySelectorAll(".logo-izquierda").forEach(img => {
         img.src = base64;
         img.style.display = "inline-block";
       });
-
-      // opcional: aplicar tema en vivo para que el drop-shadow/estilo se actualice
-      try {
-        if (typeof aplicarConfiguracionSegura === 'function') {
-          aplicarConfiguracionSegura({ ...configActual, logo: base64 }, 'logo-preview');
-        } else {
-          aplicarConfiguracion({ ...configActual, logo: base64 });
-        }
-      } catch {}
     };
     reader.readAsDataURL(file);
-  }, { once: false });
-});
+  });
+ });
 
-
-// ==== GUARDAR CONFIGURACIÓN (definitivo) ==== //
+// =============================
+// GUARDAR CONFIGURACIÓN (definitivo)
+// =============================
 function guardarConfiguracion() {
   // 0) Extras de perfil usados en la UI
   configTemporal.telefono_dueno = getVal("input-telefono-dueno");
@@ -1537,7 +1719,7 @@ function guardarConfiguracion() {
     ? cfg.ingresos_fuentes.filter(Boolean)
     : [];
 
-  // 4) pagos_config
+  // 4) pagos_config: tomar del modal si hay; si no, autogenerar consistente
   let pagos_config = cfg.pagos || cfg.pagos_config || null;
   if (!pagos_config) {
     pagos_config = {
@@ -1547,6 +1729,7 @@ function guardarConfiguracion() {
       submediosPorMedio: Object.fromEntries(medios_pago.map(m => [m.medio, m.submedios || []]))
     };
   } else {
+    // coherencia con catálogos actuales
     const billsSet    = new Set(bills.map(b => b.nombre));
     const personasSet = new Set(personas.map(p => p.nombre));
     const mediosSet   = new Set(medios_pago.map(m => m.medio));
@@ -1565,7 +1748,7 @@ function guardarConfiguracion() {
     pagos_config.submediosPorMedio = limpio;
   }
 
-  // 5) Payload EXACTO que espera el backend
+  // 5) Payload EXACTO que espera el backend (columnas jsonb)
   const payload = {
     colores:          cfg.colores || {},
     fuentes:          cfg.fuentes || {},
@@ -1579,14 +1762,8 @@ function guardarConfiguracion() {
     pagos_config
   };
 
-  // 6) Aplica en vivo para que la UI refleje lo que guardas
-  try {
-    if (typeof aplicarConfiguracionSegura === 'function') {
-      aplicarConfiguracionSegura({ ...configTemporal, ...payload }, 'guardar-config');
-    } else {
-      aplicarConfiguracion({ ...configTemporal, ...payload });
-    }
-  } catch {}
+  // 6) Aplica en vivo (para que la UI refleje lo que vas a guardar)
+  try { aplicarConfiguracion({ ...configTemporal, ...payload }); } catch {}
 
   // 7) Persistir en backend
   fetch('/guardar_configuracion', {
@@ -1620,7 +1797,9 @@ function guardarConfiguracion() {
   });
 }
 
-// ===== RESTABLECER TODO: config por defecto + borrar TODOS los datos ==== //
+// =============================
+// RESTABLECER TODO: config por defecto + borrar TODOS los datos
+// =============================
 async function restablecerConfiguracion() {
   const ok = confirm("⚠️ Esto restablecerá la configuración por defecto y borrará TODOS tus datos (ingresos, egresos, bills y pagos). ¿Continuar?");
   if (!ok) return;
@@ -1663,9 +1842,10 @@ async function restablecerConfiguracion() {
     try { Swal.fire({ icon:'error', title:'Error', text: String(e.message || e) }); } catch {}
   }
 }
-window.guardarConfiguracion = guardarConfiguracion;
 
-// ==== FUNCIÓN AUXILIAR PARA RELLENAR SELECT ==== //
+// ==============================
+// FUNCIÓN AUXILIAR PARA RELLENAR SELECT
+// ==============================
 function rellenarSelect(select, opciones, placeholder = "Seleccionar") {
   if (!select) return;
   select.innerHTML = `<option value="">${placeholder}</option>`;
@@ -1674,188 +1854,15 @@ function rellenarSelect(select, opciones, placeholder = "Seleccionar") {
   });
 }
 
-// LOGIN
-(function wireLoginForm() {
-  function bind() {
-    const form = document.getElementById('form-login');
-    if (!form) return;
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const emailInput = document.getElementById('login-usuario');
-      const passInput  = document.getElementById('login-password');
-      const btn        = form.querySelector('button[type="submit"]');
-
-      let email = normalizarEmailLogin(emailInput?.value);
-      const password = String(passInput?.value || "");
-      if (!email || !password) return;
-
-      // bloquear doble submit
-      btn && (btn.disabled = true);
-      btn && (btn.dataset.originalText = btn.textContent);
-      btn && (btn.textContent = 'Ingresando...');
-
-      try {
-        await doLogin(email, password);        // <- AUTH maneja sesión y alertas
-        if (typeof enforceAuthView === 'function') enforceAuthView(); // <- ROUTER decide vista
-        try { await checkAccountStatus?.(); } catch {}
-      } catch (err) {
-        console.error('wireLoginForm/doLogin:', err);
-      } finally {
-        // restaurar botón
-        if (btn) {
-          btn.disabled = false;
-          if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
-        }
-      }
-    }, { passive: false });
-  }
-
-  // si no existe aún, espera DOMContentLoaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bind, { once: true });
-  } else {
-    bind();
-  }
-})();
-window.__hitCount = window.__hitCount || {};
-(function wrapFetchForCount(){
-  if (window.__fetchWrapped) return;
-  window.__fetchWrapped = true;
-
-  const orig = window.fetch;
-  window.fetch = function(url, opts){
-    try {
-      const u = (typeof url === 'string' ? url : url.url) || '';
-      const key = u.replace(location.origin, '');
-      window.__hitCount[key] = (window.__hitCount[key] || 0) + 1;
-      console.count(`CALL ${key}`);
-    } catch {}
-    return orig.apply(this, arguments);
-  };
-})();
-
-// ==== REGISTRO (a prueba de duplicados) ==== //
-if (!window.__authRegistroInit) {
-  window.__authRegistroInit = true;   // 1) guard de módulo
-
-  (function wireRegistroForm() {
-    function bind() {
-      const form = document.getElementById('form-registro');
-      if (!form) return;
-
-      if (form.dataset.bound === '1') return;  // 2) guard por formulario
-      form.dataset.bound = '1';
-
-      let submitting = false;                  // 3) candado de envío
-
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (submitting) return;                // evita doble submit por listeners duplicados
-        submitting = true;
-
-        const nombre   = document.getElementById('registro-nombre')?.value?.trim() || "";
-        const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
-        const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
-        const password = document.getElementById('registro-password')?.value || "";
-        const btn      = form.querySelector('button[type="submit"]');
-
-        if (!usuario || !password) {
-          await Swal?.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
-          submitting = false;
-          return;
-        }
-        const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
-
-        // bloquear doble submit visual
-        if (btn) {
-          btn.disabled = true;
-          btn.dataset.originalText = btn.textContent;
-          btn.textContent = 'Creando cuenta...';
-        }
-
-        try {
-          const res = await fetch('/registro', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nombre, email, password })
-          });
-          const raw = await res.text();
-          let data = {};
-          try { data = JSON.parse(raw); } catch {}
-
-          if (!res.ok || data.ok === false) {
-            const msg = data?.error || `Error ${res.status}`;
-            await Swal?.fire({ icon:'error', title:'No pudimos registrar', text: msg });
-            return;
-          }
-
-          // Éxito al crear cuenta
-          await Swal?.fire({
-            icon: 'success',
-            title: '🎉 ¡Cuenta creada!',
-            text: 'Tu prueba gratuita ya comenzó.',
-            confirmButtonText: 'Continuar'
-          });
-
-          // Si el backend hizo auto-login, /session ya estará OK; si no, hacemos login manual
-          let ses = null;
-          try {
-            ses = await fetch('/session', { method: 'GET', credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
-          } catch {}
-
-          if (!ses?.user) {
-            await doLogin(email, password);
-          } else {
-            // marcar sesión en front si ya estás logueado por cookie
-            if (typeof _marcarSesion === 'function') _marcarSesion(true);
-            sessionStorage.setItem('usuario', JSON.stringify({
-              id: ses.user.id,
-              email: ses.user.email,
-              nombre: ses.user.nombre || ses.user.email
-            }));
-          }
-
-          enforceAuthView?.();
-          try { await checkAccountStatus?.(); } catch {}
-
-          form.reset();
-
-        } catch (err) {
-          console.error('Registro error:', err);
-          await Swal?.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
-        } finally {
-          submitting = false;
-          if (btn) {
-            btn.disabled = false;
-            if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
-          }
-        }
-      }, { passive: false });
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', bind, { once: true });
-    } else {
-      bind();
-    }
-  })();
-}
-
 // ==============================
 // ACTUALIZAR SELECTS DE TODAS LAS VISTAS
 // ==============================
 function actualizarSelectsVistas(vista = "todos") {
-  console.log("DEBUG: actualizarSelectsVistas()", vista, {
-    fuentes: configFuentesIngresos.length,
-    bills: configBills.length,
-    personas: configPersonas.length,
-    egresosCat: configEgresosCategorias.length,
-    mediosPago: configMediosPago.length
-  });
-  
-  // INGRESOS //
+  console.log("DEBUG: actualizarSelectsVistas()", vista);
 
+  // ======================================
+  // INGRESOS
+  // ======================================
   if (vista === "todos" || vista === "ingresos") {
   const selectIngresos = document.getElementById("fuente-ingreso");
   const filtroFuenteIngreso = document.getElementById("filtro-fuente-ingreso");
@@ -1864,7 +1871,9 @@ function actualizarSelectsVistas(vista = "todos") {
   rellenarSelect(filtroFuenteIngreso, configFuentesIngresos, "Todas");
 }
 
-  // BILLS //
+  // ======================================
+  // BILLS
+  // ======================================
   if (vista === "todos" || vista === "bills") {
     const selectTipoBill = document.getElementById("bill-tipo");
     const filtroTipoBill = document.getElementById("filtro-tipo-bill");
@@ -1892,7 +1901,9 @@ function actualizarSelectsVistas(vista = "todos") {
     }
   }
 
-  // EGRESOS //
+  // ======================================
+  // EGRESOS
+  // ======================================
   if (vista === "todos" || vista === "egresos") {
     const selectCategoria = document.getElementById("categoria-egreso");
     const filtroCategoria = document.getElementById("filtro-categoria-egreso");
@@ -1903,7 +1914,10 @@ function actualizarSelectsVistas(vista = "todos") {
     rellenarSelect(selectMedioEgreso, configMediosPago.map(m => m.medio), "Seleccionar medio");
   }
 
-  // PAGOS //
+  // ======================================
+  // PAGOS
+  // ======================================
+
     if (vista === "todos" || vista === "pagos") {
       // En lugar de rellenar uno por uno con los arrays globales,
       // usamos lo seleccionado en el modal:
@@ -1911,8 +1925,9 @@ function actualizarSelectsVistas(vista = "todos") {
     }
 }
 
-
-// LLENAR SELECT DE FUENTES (para el modal) //
+// =============================
+// LLENAR SELECT DE FUENTES (para el modal)
+// =============================
 // === Tipografías del modal (RENOMBRADA para evitar choque con Ingresos) ===
 function llenarSelectFuentesTipografia() {
   const fuentesTitulo = document.getElementById("conf-fuente-titulo");
@@ -1930,33 +1945,41 @@ if (typeof W.llenarSelectFuentes !== "function") {
   W.llenarSelectFuentes = (...args) => llenarSelectFuentesTipografia(...args);
 }
 
-// LEER DATOS DESDE EL MODAL A configTemporal //
+
+// =============================
+// LEER DATOS DESDE EL MODAL A configTemporal
+// =============================
 function leerDesdeModal() {
   const vistas = Array.from(document.querySelectorAll(".vista-checkbox:checked"))
                       .map(cb => cb.value);
 
   configTemporal.colores = {
-    fondo:        getVal("conf-fondo"),
+    fondo: getVal("conf-fondo"),
+    texto: getVal("conf-texto"),
     boton_inicio: getVal("conf-boton-inicio"),
-    boton_fin:    getVal("conf-boton-fin")
+    boton_fin: getVal("conf-boton-fin")
   };
 
   configTemporal.tarjetaResumen = {
-    colorInicio:  getVal("conf-resumen-inicio"),
-    colorFinal:   getVal("conf-resumen-fin")
+    colorInicio: getVal("conf-resumen-inicio"),
+    colorFinal: getVal("conf-resumen-fin")
   };
 
   configTemporal.fuentes = {
-    titulo:         getVal("conf-fuente-titulo"),
-    secundario:     getVal("conf-fuente-cuerpo"),
-    colorTitulo:    getVal("conf-color-titulo"),
-    colorSecundario:getVal("conf-color-secundario")
+    titulo: getVal("conf-fuente-titulo"),
+    secundario: getVal("conf-fuente-cuerpo")
   };
 
+  // NO tocar configTemporal.logo aquí
+  // El logo ya está guardado en memoria cuando se selecciona un archivo en el input
+  // y se maneja con FileReader.
   configTemporal.vistas = vistas;
 }
 
-// ==== OPCIONES ESPECÍFICAS SEGÚN VISTA ==== //
+// =============================
+// OPCIONES ESPECÍFICAS SEGÚN VISTA
+// =============================
+
 function actualizarOpcionesEspecificas() {
   const contenedor = document.getElementById("opciones-especificas");
   if (!contenedor) return;
@@ -2012,7 +2035,7 @@ function actualizarOpcionesEspecificas() {
       renderizarConfigPersonas();
       renderizarConfigBills();
 
-      // Validar formato de teléfono //
+      // Validar formato de teléfono
       setTimeout(() => {
         const telefonoInput = document.getElementById("input-telefono-persona");
         const telefonoEjemplo = document.getElementById("telefono-ejemplo");
@@ -2089,7 +2112,9 @@ function actualizarOpcionesEspecificas() {
   }); // <- cierra forEach
 } // <- cierra función
 
-// ==== CONFIGURACION INGRESOS ==== //
+// =============================
+// CONFIGURACION INGRESOS
+// =============================
 function agregarConfigFuenteIngreso() {
   const input = document.getElementById("input-ingresos-fuente");
   const valor = input.value.trim();
@@ -2155,7 +2180,9 @@ function llenarSelectFuentesIngresos() {
 // opcional: exponerla por si la llamas desde otros módulos
 W.llenarSelectFuentesIngresos = llenarSelectFuentesIngresos;
 
-// ==== CONFIGURACION BILLS ==== //
+// =============================
+// CONFIGURACION BILLS
+// =============================
 function agregarConfigBill() {
   const input = document.getElementById("input-bill-nombre");
   const nombre = input.value.trim();
@@ -2215,7 +2242,9 @@ function renderizarConfigBills() {
   try { renderizarConfigPagos(); } catch {}
 }
 
-// ==== CONFIGURACIÓN PERSONAS ==== //
+// =============================
+// CONFIGURACIÓN PERSONAS
+// =============================
 function agregarConfigPersona() {
   const nombreInput = document.getElementById("input-nombre-persona");
   const telInput = document.getElementById("input-telefono-persona");
@@ -2252,8 +2281,9 @@ function renderizarConfigPersonas() {
   try { renderizarConfigPagos(); } catch {}
 
 }
-
-// ==== CONFIGURACIÓN EGRESOS ==== //
+// =============================
+// CONFIGURACIÓN EGRESOS
+// =============================
 function agregarCategoriaEgreso() {
   const input = document.getElementById("input-egreso-categoria");
   const valor = input.value.trim();
@@ -2374,7 +2404,9 @@ function renderizarConfigEgresos() {
   });
 }
 
-// ==== CONFIGURACION PAGOS (modal) ==== //
+// =============================
+// CONFIGURACION PAGOS (modal)
+// =============================
 function renderizarConfigPagos() {
   const billsContenedor    = document.getElementById("lista-bills-pagos");
   const personasContenedor = document.getElementById("lista-personas-pagos");
@@ -2451,7 +2483,9 @@ function renderizarConfigPagos() {
   }
 }
 
-// LEE SELECCIÓN DE CONFIG > PAGOS //
+// =============================
+// LEE SELECCIÓN DE CONFIG > PAGOS
+// =============================
 function leerConfigPagosSeleccion() {
   const billsSel = Array.from(document.querySelectorAll('#lista-bills-pagos input[type="checkbox"]:checked'))
                         .map(cb => cb.value);
@@ -2476,340 +2510,10 @@ function leerConfigPagosSeleccion() {
     submediosPorMedio
   };
 }
-// === Tooltips en móviles: muestra data-tip ~1s al tocar ===
-document.addEventListener("touchstart", (e) => {
-  const btn = e.target.closest(".icon-btn[data-tip]");
-  if (!btn) return;
-  btn.classList.add("tip-show");
-  setTimeout(() => btn.classList.remove("tip-show"), 1200);
-}, { passive: true });
 
-// =============================
-// 11   MODULES (por dominio) 🧩
-// =============================
-// ==== CARGAR Y NORMALIZAR EGRESOS ==== //
-let _egresosCargando = false;
-let _egresosListos   = false;
-
-function cargarYNormalizarEgresos(callback) {
-  // si ya los tenemos en memoria, usamos eso
-  if (_egresosListos && Array.isArray(egresos) && egresos.length > 0) {
-    callback && callback();
-    return;
-  }
-  if (_egresosCargando) {
-    // evita loops agresivos
-    setTimeout(() => { callback && callback(); }, 0);
-    return;
-  }
-  if (!isLoggedIn()) {
-  _egresosListos = true;
-  _egresosCargando = false;
-  callback && callback();
-  return;
-}
-  _egresosCargando = true;
-
-  fetchJSON('/cargar_egresos')   // 👈 usa el helper robusto
-    .then(payload => {
-      const lista = Array.isArray(payload)
-        ? payload
-        : (Array.isArray(payload.egresos) ? payload.egresos : []);
-
-      const normalizados = (lista || []).map(e => {
-        let fecha = e?.fecha ? String(e.fecha) : "";
-        if (fecha.includes("T")) fecha = fecha.split("T")[0];
-        fecha = fecha.replace(/\//g, "-").slice(0, 10);
-        const montoNum = Number(String(e?.monto ?? 0).toString().replace(/[^0-9.-]+/g, ""));
-        return {
-          ...e,
-          fecha,
-          monto: isNaN(montoNum) ? 0 : montoNum
-        };
-      });
-
-      egresos.length = 0;
-      egresos.push(...normalizados);
-      window.egresos = egresos;
-
-      _egresosListos   = true;
-      _egresosCargando = false;
-      callback && callback();
-    })
-    .catch(err => {
-      const msg = String(err?.message || "");
-      // si es 401, mostramos login y NO seguimos spameando
-      if (msg.includes('HTTP 401')) {
-        document.getElementById('modal-login')?.classList.add('abierto');
-      } else {
-        console.error("Error cargando egresos:", err);
-        // opcional: toastErr?.('❌ No se pudieron cargar los egresos');
-      }
-      _egresosListos   = true;   // marcamos listo para no entrar en bucles
-      _egresosCargando = false;
-      callback && callback();
-    });
-}
-// === Anti–tormenta para /cargar_egresos ===
-(function deDupEgresos() {
-  // Guarda original si existe
-  const orig = window.cargarYNormalizarEgresos;
-  if (!orig || orig.__wrapped) return;
-
-  let inflight = null;       // promesa en vuelo
-  let lastOK   = 0;          // último éxito (ms)
-  const COOL   = 500;        // no más de 1 hit cada 500ms
-
-  function runOnce(cb) {
-    // si ya hay una petición en curso, cuélgate de ella
-    if (inflight) return inflight.finally(() => cb && cb());
-
-    // si acabamos de cargar hace nada, no golpees el server otra vez
-    const since = Date.now() - lastOK;
-    if (since < COOL) {
-      cb && setTimeout(cb, COOL - since);
-      return Promise.resolve();
-    }
-
-    inflight = new Promise((resolve) => {
-      try {
-        // llamamos al original, asegurando que SIEMPRE resolvemos
-        orig(() => {
-          try { lastOK = Date.now(); } catch {}
-          try { cb && cb(); } catch {}
-          resolve();
-        });
-      } catch (e) {
-        console.error('cargarYNormalizarEgresos original lanzó:', e);
-        try { cb && cb(); } catch {}
-        resolve();
-      }
-    }).finally(() => { inflight = null; });
-
-    return inflight;
-  }
-
-  function wrapped(cb) { return runOnce(cb); }
-  wrapped.__wrapped = true;
-  window.cargarYNormalizarEgresos = wrapped;
-})();
-
-// ==== MODAL DE CONFIGURACIÓN ==== //
-// ==== CARGAR EN EL MODAL ==== //
-function cargarEnModal(cfg) {
-  // snapshot para revertir si cierra sin guardar
-  copiaAntesDeAbrirGlobal = structuredClone(configActual);
-  seGuardoConfiguracion = false;
-
-  // === Rellenar inputs ===
-  setInput("conf-fondo", cfg.colores.fondo);
-  setInput("conf-boton-inicio", cfg.colores.boton_inicio);
-  setInput("conf-boton-fin", cfg.colores.boton_fin);
-  setInput("conf-resumen-inicio", cfg.tarjetaResumen.colorInicio);
-  setInput("conf-resumen-fin", cfg.tarjetaResumen.colorFinal);
-  setInput("conf-color-titulo", cfg.fuentes.colorTitulo);
-  setInput("conf-color-secundario", cfg.fuentes.colorSecundario);
-  setInput("conf-fuente-titulo", cfg.fuentes.titulo);
-  setInput("conf-fuente-cuerpo", cfg.fuentes.secundario);
-  setInput("input-telefono-dueno", cfg.telefono_dueno || "");
-  telefonoDueno = cfg.telefono_dueno || "";
-
-// === Logo preview dentro del modal ===
-const imgPreview = document.getElementById("preview-logo");
-if (imgPreview) {
-  if (cfg.logo && cfg.logo.trim() !== "") {
-    imgPreview.src = cfg.logo;          // 👈 variable correcta
-    imgPreview.style.display = "block";
-  } else {
-    imgPreview.src = "";
-    imgPreview.style.display = "none";
-  }
-}
-  // === ⚠️ EVITAR LISTENERS DUPLICADOS EN LAS CASILLAS DEL MODAL ===
-  // Usamos el contenedor de las casillas y marcamos que ya se añadió el listener.
-  const wrapper = document.getElementById("vistas-opciones");
-  if (wrapper && !wrapper.dataset.listener) {
-    document.querySelectorAll(".vista-checkbox").forEach(cb => {
-      cb.addEventListener("change", () => {
-        // 1️⃣ recojo qué vistas quedaron marcadas
-        const vistasSeleccionadas = Array.from(
-          document.querySelectorAll(".vista-checkbox:checked")
-        ).map(c => c.value);
-
-        // 2️⃣ actualizo visibilidad de botones del menú
-        document.querySelectorAll("#menu-vistas button[data-vista]")
-          .forEach(btn => {
-            btn.style.display = vistasSeleccionadas.includes(btn.dataset.vista)
-              ? "inline-block"
-              : "none";
-          });
-
-        // 3️⃣ si hay al menos una, muestro sólo la primera
-        if (vistasSeleccionadas.length > 0) {
-          mostrarVista(vistasSeleccionadas[0]);
-        } else {
-          // si no queda ninguna, oculto todas
-          document.querySelectorAll(".vista").forEach(v => v.style.display = "none");
-        }
-
-        // 4️⃣ refresco el panel interno del modal
-        actualizarOpcionesEspecificas();
-      });
-    });
-
-    // Marcamos que ya agregamos los listeners (la próxima vez no se duplica)
-    wrapper.dataset.listener = "1";
-  }
-
-  // 3) Refresca las opciones del modal
-  actualizarOpcionesEspecificas();
-}
-
-// ==== abrir modal ==== //
-async function abrirModalConfiguracion() {
-  const cliente = clienteActual();
-
-  let data;
-  try {
-    data = cliente
-      ? await fetchJSON(`/cargar_configuracion?cliente=${encodeURIComponent(cliente)}`, { method: 'GET' }, { silent401: false })
-      : configPorDefecto;
-  } catch (err) {
-    // Si es 401 ya se mostró el login en fetchJSON; salimos sin abrir modal
-    if (String(err?.message).includes('401')) return;
-    console.error("❌ Error cargando configuración:", err);
-    data = {};
-  }
-
-  const base = data && Object.keys(data).length ? data : configPorDefecto;
-  const cfg  = mergeConDefecto(normalizarConfigEntrante(base));
-
-  // snapshots
-  configTemporal = structuredClone(cfg);
-  configActual   = structuredClone(cfg);
-
-  // Actualiza arrays SIN reasignar
-  replaceArray(
-    configFuentesIngresos,
-    Array.from(new Set((cfg.ingresos_fuentes || []).map(s => String(s).trim()).filter(Boolean)))
-  );
-
-  replaceArray(
-    configPersonas,
-    (typeof dedupePersonas === 'function')
-      ? dedupePersonas((cfg.personas || []).map(p => (typeof normalizaPersona === 'function' ? normalizaPersona(p) : p)))
-      : (cfg.personas || [])
-  );
-
-  replaceArray(
-    configBills,
-    (typeof limpiarBillsConPersonasInvalidas === 'function')
-      ? limpiarBillsConPersonasInvalidas(cfg.bills || [], configPersonas)
-      : (cfg.bills || [])
-  );
-
-  replaceArray(configEgresosCategorias, cfg.egresos_categorias || []);
-  replaceArray(configMediosPago,        cfg.medios_pago        || []);
-
-  // Reexponer referencias
-  W.configFuentesIngresos = configFuentesIngresos;
-  W.configBills           = configBills;
-  W.configPersonas        = configPersonas;
-  W.configMediosPago      = configMediosPago;
-
-  // Pintar el modal
-  try { cargarEnModal(configTemporal); } catch(e){ console.warn("cargarEnModal()", e); }
-  try { W.llenarSelectFuentes?.(); } catch{}
-  try { W.llenarSelectFuentesIngresos?.(); } catch{}
-  try { renderizarConfigPagos?.(); } catch{}
-  try { configTemporal.pagos && marcarChecksPagos?.(configTemporal.pagos); } catch{}
-
-  const modal = document.getElementById("modal-configuracion");
-  if (modal) modal.style.display = "flex";
-
-  // Solo refrescos ligeros (sin re-aplicar tema global desde aquí)
-  try { actualizarSelectsVistas?.(); }   catch(e){ console.warn("actualizarSelectsVistas()", e); }
-  try { wireDisponibleAuto?.(); }        catch(e){ console.warn("wireDisponibleAuto()", e); }
-  try { refrescarDisponibleGlobal?.(); } catch(e){ console.warn("refrescarDisponibleGlobal()", e); }
-}
-// ==== cerrar modal ==== //
-function cerrarModalConfiguracion() {
-  const modal = document.getElementById("modal-configuracion");
-  if (modal) modal.style.display = "none";
-}
-
-// ==== aplicarConfiguracionDesdeModal ==== //
-function aplicarConfiguracionDesdeModal() {
-  // 1) Vistas marcadas en el modal
-  const vistasSeleccionadas = Array.from(
-    document.querySelectorAll(".vista-checkbox:checked")
-  ).map(cb => cb.value);
-
-  const vistasFinal = vistasSeleccionadas.length
-    ? vistasSeleccionadas
-    : (configActual?.vistas || []);
-
-  // 2) Lee selección de pagos del modal (si existe)
-  try { leerConfigPagosSeleccion?.(); } catch {}
-
-  // 3) Construye la nueva config con lo que hay en el modal + arrays actuales
-  const nueva = {
-    colores: {
-      fondo: getVal("conf-fondo") || (configActual.colores?.fondo || "#f9f9f9"),
-      boton_inicio: getVal("conf-boton-inicio") || (configActual.colores?.boton_inicio || "#9a27f7"),
-      boton_fin: getVal("conf-boton-fin") || (configActual.colores?.boton_fin || "#e762d5"),
-    },
-    tarjetaResumen: {
-      colorInicio: getVal("conf-resumen-inicio") || (configActual.tarjetaResumen?.colorInicio || "#fa9be2"),
-      colorFinal: getVal("conf-resumen-fin") || (configActual.tarjetaResumen?.colorFinal || "#ffffff"),
-    },
-    fuentes: {
-      titulo: getVal("conf-fuente-titulo") || (configActual.fuentes?.titulo || "Gochi Hand"),
-      secundario: getVal("conf-fuente-cuerpo") || (configActual.fuentes?.secundario || "Arial"),
-      colorTitulo: getVal("conf-color-titulo") || (configActual.fuentes?.colorTitulo || "#553071"),
-      colorSecundario: getVal("conf-color-secundario") || (configActual.fuentes?.colorSecundario || "#8b68b0"),
-    },
-    logo: (typeof configTemporal?.logo === 'string' ? configTemporal.logo : (configActual.logo || "")),
-    vistas: vistasFinal,
-
-    // catálogos actuales (editados en modal con sus botones)
-    ingresos_fuentes: Array.isArray(configFuentesIngresos) ? [...configFuentesIngresos] : (configActual.ingresos_fuentes || []),
-    bills: Array.isArray(configBills) ? [...configBills] : (configActual.bills || []),
-    personas: Array.isArray(configPersonas) ? [...configPersonas] : (configActual.personas || []),
-    egresos_categorias: Array.isArray(configEgresosCategorias) ? [...configEgresosCategorias] : (configActual.egresos_categorias || []),
-    medios_pago: Array.isArray(configMediosPago) ? [...configMediosPago] : (configActual.medios_pago || []),
-
-    telefono_dueno: getVal("input-telefono-dueno") || configTemporal?.telefono_dueno || configActual?.telefono_dueno || "",
-    pagos: configTemporal?.pagos || configActual?.pagos || { bills: [], personas: [], medios: [], submediosPorMedio: {} }
-  };
-
-  // 4) Refresca estado en memoria
-  configTemporal = structuredClone(nueva);
-  configActual   = structuredClone(nueva);
-
-  // 5) Aplica estilos/colores/fuentes/botones/tarjetas + repoblar selects
-  (typeof aplicarConfiguracionSegura === 'function'
-  ? aplicarConfiguracionSegura(nueva, 'modal-live')
-  : aplicarConfiguracion(nueva));
-  try { limpiarYRepoblarSelects?.(configActual); } catch {}
-
-  // 6) Mostrar/ocultar botones del menú según vistas activas
-  document.querySelectorAll("#menu-vistas button[data-vista]").forEach(btn => {
-    const v = btn.dataset.vista;
-    btn.style.display = vistasFinal.includes(v) ? "inline-block" : "none";
-  });
-
-  // 7) Si hay vistas, muestra la primera
-  if (Array.isArray(vistasFinal) && vistasFinal.length) {
-    document.querySelectorAll(".vista").forEach(v => {
-      if (v.id === 'usuario') return; // no tocar el login
-      v.style.display = vistasFinal.includes(v.id) ? "block" : "none";
-    });
-    (window.mostrarVista || W.mostrarVista)?.(vistasFinal[0]);
-  }
-}
-
-//  ==== MODAL DEL PERFIL ==== //
+// =====================================
+//  AUTO-INJECTOR DEL MODAL DE PERFIL
+// =====================================
 function ensurePerfilModal() {
   if (!document.getElementById("modal-perfil")) {
     const modalHTML = `
@@ -2976,6 +2680,7 @@ if (resp?.ok) {
 
   return;
 }
+
   } catch {}
   // fallback: muestra email como apodo
   const ses = JSON.parse(sessionStorage.getItem("usuario") || "{}");
@@ -3020,7 +2725,9 @@ async function cargarPerfilEnUI() {
   }
 }
 
-// ==== TELÉFONO EN BARRA (auto-inject)==== //
+// ================================
+// TELÉFONO EN BARRA (auto-inject)
+// ================================
 function updateTelefonoPopover(tel) {
   const out = document.getElementById("telefono-dueno-pop");
   if (out) out.textContent = (tel || "—").trim();
@@ -3064,244 +2771,373 @@ document.addEventListener("DOMContentLoaded", () => {
 //=======================
 // Usuario y Login //
 //=======================
-(() => {
-  if (window.__authInit) return;       // 👈 evita doble wiring
-  window.__authInit = true;
+document.addEventListener("DOMContentLoaded", () => {
+  const splash = document.getElementById("splash");
+  const contenido = document.getElementById("contenido-app");
+  const formRegistro = document.getElementById("form-registro");
+  const formLogin = document.getElementById("form-login");
+  const zonaPrivada = document.getElementById("zona-privada");
+  const usuarioNombre = document.getElementById("nombre-usuario-barra");
+  const btnCerrarSesion = document.getElementById("cerrar-sesion-barra");
+  const inputPassRegistro = document.getElementById("registro-password");
+  const inputPassLogin = document.getElementById("login-password");
+  const usuarioInput = document.getElementById("registro-user");
+  const dominioSelect = document.getElementById("registro-dominio");
 
-  const $ = (id) => document.getElementById(id);
-
-  // ---- Inactividad (una sola vez) ----
+  // 🕒 Inactividad cierra sesión en 15 min
   let temporizadorInactividad;
-  function reiniciarTemporizadorInactividad() {
-    clearTimeout(temporizadorInactividad);
-    temporizadorInactividad = setTimeout(() => {
-      fetch('/logout', { method: 'POST', credentials: 'same-origin' })
-        .catch(() => {})
-        .finally(() => {
-          try { sessionStorage.removeItem('usuario'); } catch {}
-          if (typeof enforceAuthView === 'function') enforceAuthView();
-          location.reload();
-        });
-    }, 15 * 60 * 1000);
-  }
-  ['click','keydown','mousemove','scroll'].forEach(evt =>
-    document.addEventListener(evt, reiniciarTemporizadorInactividad, { passive: true })
+
+function reiniciarTemporizadorInactividad() {
+  clearTimeout(temporizadorInactividad);
+  temporizadorInactividad = setTimeout(() => {
+    // 1) Invalidar la cookie de sesión en el backend
+    fetch('/logout', { method: 'POST', credentials: 'same-origin' })
+      .catch(() => {}) // ignoramos errores de red
+      .finally(() => {
+        // 2) Limpiar estado del front y refrescar
+        try { sessionStorage.removeItem('usuario'); } catch {}
+        if (typeof enforceAuthView === 'function') enforceAuthView();
+        location.reload();
+      });
+  }, 15 * 60 * 1000); // 15 minutos
+}
+
+  ["click", "keydown", "mousemove", "scroll"].forEach(evt =>
+    document.addEventListener(evt, reiniciarTemporizadorInactividad)
   );
+
   reiniciarTemporizadorInactividad();
 
-  // ---- Ojo password (idempotente) ----
-  function wireOjos() {
-    document.querySelectorAll('.boton-ojo').forEach(btn => {
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', () => {
-        const input = btn.previousElementSibling;
-        if (!input) return;
-        input.type = (input.type === 'password') ? 'text' : 'password';
-        btn.textContent = (input.type === 'text') ? '🙈' : '👁️';
-      });
+  // 👉 Quitar @ al escribir usuario
+  usuarioInput.addEventListener("input", () => {
+    usuarioInput.value = usuarioInput.value.replace(/@/g, "");
+  });
+
+  // 👁️ Mostrar/ocultar contraseñas
+  document.querySelectorAll(".boton-ojo").forEach(boton => {
+    boton.addEventListener("click", () => {
+      const input = boton.previousElementSibling;
+      input.type = input.type === "password" ? "text" : "password";
+      boton.textContent = input.type === "text" ? "🙈" : "👁️";
+    });
+  });
+
+  // 🔒 Cerrar sesión
+// 🔒 Cerrar sesión (sin recargar la página)
+async function cerrarSesion(e) {
+  e?.preventDefault?.();
+
+  // 1) Intenta cerrar sesión en el backend (si no existe /logout, se ignora el error)
+  try {
+    await fetch('/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    console.warn('[logout] fallo (ignorable en local):', err);
+  }
+
+  // 2) Apaga sesión en el front
+  try { sessionStorage.removeItem('usuario'); } catch {}
+  if (typeof _marcarSesion === 'function') _marcarSesion(false);
+  window.__sessionOK   = false;
+  window.__privadaInit = false;              // evita re-bootstrap automático
+  (document.activeElement || {}).blur?.();
+  document.body.classList.remove('auth','is-auth');
+
+  // 3) Feedback y mostrar login sin recargar
+  if (window.Swal) {
+    await Swal.fire({
+      title: '¡Hasta luego!',
+      text: 'Tu sesión ha sido cerrada.',
+      icon: 'info',
+      timer: 1200,
+      showConfirmButton: false
     });
   }
-  wireOjos();
 
-  // ---- Quitar @ del usuario (si existe) ----
-  const usuarioInput = $('registro-user');
-  if (usuarioInput && !usuarioInput.dataset.bound) {
-    usuarioInput.dataset.bound = '1';
-    usuarioInput.addEventListener('input', () => {
-      usuarioInput.value = usuarioInput.value.replace(/@/g, '');
+  // 4) Volver a la pantalla de login (usa tu helper si existe)
+  if (typeof window.mostrarPantallaLogin === 'function') {
+    window.mostrarPantallaLogin();
+  } else {
+    document.getElementById('zona-privada')?.setAttribute('style','display:none;');
+    document.getElementById('barra-superior')?.setAttribute('style','display:none;');
+    document.getElementById('menu-vistas')?.setAttribute('style','display:none;');
+    document.getElementById('usuario')?.setAttribute('style','display:block;');
+    document.getElementById('seccion-usuario')?.setAttribute('style','display:block;');
+    document.getElementById('seccion-login')?.setAttribute('style','display:block;');
+    document.getElementById('seccion-registro')?.setAttribute('style','display:block;');
+  }
+}
+window.cerrarSesion = cerrarSesion; // deja la exportación global como ya la tienes
+
+// ✅ Registro (real, sin simulación)
+formRegistro.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const nombre = document.getElementById("registro-nombre").value.trim();
+  const usuario = usuarioInput.value.trim();
+  const contrasena = inputPassRegistro.value.trim();
+  const email = `${usuario}${dominioSelect.value}`.trim().toLowerCase();
+
+  // misma validación que ya tienes
+  const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,16}$/;
+  if (!regex.test(contrasena)) {
+    Swal.fire({
+      icon: 'error',
+      title: '❌ Contraseña inválida',
+      text: 'Debe tener mayúsculas, minúsculas, números y símbolos (8-16 caracteres).',
+      confirmButtonText: '👌 Entendido',
     });
+    return;
   }
 
-  // ---- Cerrar sesión (robusto, 1 sola vez) ----
-(function bindLogout() {
-  // expón el nombre que el HTML espera
-  if (!window.cerrarSesion) {
-    window.cerrarSesion = async function cerrarSesion(e) {
-      try { e?.preventDefault?.(); } catch {}
+  try {
+    const resp = await fetch("/registro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // OJO: el backend espera `password`, no `contrasena`
+      body: JSON.stringify({ nombre, email, password: contrasena })
+    });
+    const data = await resp.json().catch(() => ({}));
 
-      // feedback rápido
-      try {
-        await Swal?.fire({ title:'¡Hasta luego!', text:'Tu sesión ha sido cerrada.', icon:'info', timer: 900, showConfirmButton:false });
-      } catch {}
-
-      // 1) backend: invalida cookie
-      try { await fetch('/logout', { method:'POST', credentials:'same-origin' }); } catch {}
-
-      // 2) frontend: limpia estado
-      try { sessionStorage.removeItem('usuario'); } catch {}
-      if (typeof _marcarSesion === 'function') _marcarSesion(false);
-
-      // 3) vuelve a la vista pública (sin recargar si no quieres)
-      if (typeof mostrarPantallaLogin === 'function') {
-        mostrarPantallaLogin();
-      } else {
-        location.href = '/';
-      }
-    };
-  }
-
-  // ata el botón por id si existe y evita duplicados
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('cerrar-sesion-barra');
-    if (btn && !btn.dataset.bound) {
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', window.cerrarSesion);
-    }
-  }, { once:true });
-})();
-
-  // ---- Registro (una sola vez) ----
-const formRegistro = $('form-registro');
-if (formRegistro && !formRegistro.dataset.bound) {
-  formRegistro.dataset.bound = '1';
-  let submitting = false;
-
-  formRegistro.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (submitting) return;
-    submitting = true;
-
-    const nombre   = $('registro-nombre')?.value?.trim() || '';
-    const usuario  = usuarioInput?.value?.trim().toLowerCase() || '';
-    const dominio  = $('registro-dominio')?.value || '@gmail.com';
-    const password = $('registro-password')?.value || '';
-    const email    = usuario.includes('@') ? usuario : `${usuario}${dominio}`;
-
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,16}$/;
-    if (!usuario || !regex.test(password)) {
-      await Swal?.fire({
+    if (resp.ok && data.ok) {
+      // Backend hace auto-login → ya hay sesión
+      const usuarioSesion = { nombre: nombre || email, email };
+      sessionStorage.setItem("usuario", JSON.stringify(usuarioSesion));
+      mostrarZonaPrivada(usuarioSesion);
+      enforceAuthView();
+      formRegistro.reset();
+    } else {
+      Swal.fire({
         icon: 'error',
-        title: 'Revisa tus datos',
-        text: 'Usuario y contraseña válidos (8–16, mayúsc/minúsc/número/símbolo)',
+        title: 'No se pudo registrar',
+        text: data.error || 'Intenta con otro correo o revisa la contraseña.',
       });
-      submitting = false;
+    }
+  } catch (err) {
+    console.error("Error en registro:", err);
+    Swal.fire({ icon: 'error', title: 'Error de conexión' });
+  }
+});
+
+  // ✅ Login
+// ✅ Login
+formLogin.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-usuario").value.trim().toLowerCase();
+  const contrasena = inputPassLogin.value.trim();
+
+  console.log("🔐 Intentando login con:", email);
+
+  try {
+    const resp = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: contrasena }),
+      credentials: "same-origin"
+    });
+
+    let data = {};
+    try { data = await resp.json(); } catch {}
+
+    if (!resp.ok || data.error || data.ok === false) {
+      alert(data.error || "Usuario o contraseña incorrectos");
       return;
     }
 
-    const btn = formRegistro.querySelector('button[type="submit"]');
-    if (btn) { btn.disabled = true; btn.dataset.txt = btn.textContent; btn.textContent = 'Creando cuenta…'; }
+    // 👇👇 MARCAR SESIÓN **ANTES** de disparar cargar_configuracion/bills/etc.
+    if (typeof _marcarSesion === "function") _marcarSesion(true);
+    else window.__sessionOK = true;
 
-    try {
-      const resp = await fetch('/registro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, password })
-      });
-      const data = await resp.json().catch(() => ({}));
+    // Guardar usuario para el front
+    const usuario = {
+      id: data.id,
+      email: data.email || email,
+      nombre: data.nombre || data.email || email
+    };
+    try { sessionStorage.setItem("usuario", JSON.stringify(usuario)); } catch {}
 
-      if (!resp.ok || data?.ok === false) {
-        const msg = data?.error || `Error ${resp.status}`;
-        await Swal?.fire({ icon:'error', title:'No pudimos registrar', text: msg });
-        return; // ⛔️ aquí NO seguimos (nada de marcar sesión)
-      }
+    // Mostrar zona privada y cargar datos
+    mostrarZonaPrivada?.(usuario);
+    await iniciarZonaPrivada?.();    // aquí ya no se bloqueará /cargar_configuracion
+    enforceAuthView?.();
+    ocultarSplash?.();
 
-      await Swal?.fire({
-        icon:'success',
-        title:'🎉 ¡Cuenta creada!',
-        text:'Tu prueba gratuita ya comenzó.',
-        confirmButtonText:'Continuar'
-      });
+  } catch (err) {
+    console.error("Error en login:", err);
+    alert("Error de conexión con el servidor");
+    // por si algo falló, deja el flag apagado
+    if (typeof _marcarSesion === "function") _marcarSesion(false);
+    else window.__sessionOK = false;
+  }
+});
 
-      // ✅ Login real (valida cookie/sesión en backend)
-      await doLogin(email, password);
+// =====================================================
+// ZONA PRIVADA / LOGIN  SPLASH
+// =====================================================
 
-      // 🚦 Deja que el router decida qué mostrar
-      enforceAuthView?.();
+// controla una sola inicialización post-login por sesión de app
+let __privadaInit = false;
 
-      // (opcional) avisos de trial
-      try { await checkAccountStatus?.(); } catch {}
+// 1) Mostrar zona privada
+function mostrarZonaPrivada(usuario = null) {
+  if (!window.__sessionOK) { console.debug('[guard] Ignoro mostrarZonaPrivada: no hay sesión'); return; }
+  if (typeof _marcarSesion === 'function') _marcarSesion(true);
+  document.body.classList.add('auth');
 
-      // Limpia el form
-      formRegistro.reset();
+  // datos de usuario (de argumento o de sessionStorage)
+  let u = usuario;
+  if (!u) { try { u = JSON.parse(sessionStorage.getItem('usuario') || '{}'); } catch { u = {}; } }
 
-    } catch (err) {
-      console.error('Registro error:', err);
-      await Swal?.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
-    } finally {
-      submitting = false;
-      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.txt || 'Crear cuenta'; }
-    }
-  });
+  // ocultar splash + login
+  const byId = (id)=>document.getElementById(id);
+  byId('splash')?.setAttribute('style','display:none;');
+  byId('usuario')?.setAttribute('style','display:none;');
+
+  // mostrar zona privada
+  byId('zona-privada')?.setAttribute('style','display:block;');
+  byId('barra-superior')?.setAttribute('style','display:flex;');
+  byId('menu-vistas')?.setAttribute('style','display:flex;');
+
+  const contenido = byId('contenido-app');
+  if (contenido) {
+    contenido.style.display    = 'block';
+    contenido.style.visibility = 'visible';
+    contenido.style.opacity    = '1';
+  }
+
+  // nombre en la barra
+  const nombre = byId('nombre-usuario-barra');
+  if (nombre) nombre.textContent = u?.nombre || u?.email || 'Usuario';
+
+  // ocultar todas las vistas y abrir la primera
+  document.querySelectorAll('.vista').forEach(v => v.style.display = 'none');
+
+  const orden = (window.configActual?.vistas?.length ? window.configActual.vistas
+                : ['ingresos','bills','egresos','pagos']);
+  try { window.ensureMenuVistas?.(orden); } catch {}
+
+  const primera = orden[0] || 'ingresos';
+  window.mostrarVista?.(primera);
+
+  // marcar botón activo en el menú
+  document.getElementById('menu-vistas')
+    ?.querySelectorAll('button[data-vista]')
+    .forEach(b => b.classList.toggle('is-active', b.dataset.vista === primera));
+
+  // enganchar botón cerrar (sin duplicar y evitando submit)
+  const btnSalir = byId('cerrar-sesion-barra');
+  if (btnSalir) {
+    btnSalir.type = 'button';
+    btnSalir.onclick = window.cerrarSesion || null;
+  }
+
+  // cargas post-login una sola vez
+  if (!__privadaInit) {
+    __privadaInit = true;
+    Promise.resolve(window.cargarConfigYAplicar?.())
+      .finally(() => window.cargarPerfilEnUI?.());
+  }
 }
 
-  // ---- Login (una sola vez) ----
-  const formLogin = $('form-login');
-  if (formLogin && !formLogin.dataset.bound) {
-    formLogin.dataset.bound = '1';
-    let submitting = false;
+// 2) Mostrar vista de login/registro
+function mostrarVistaUsuario() {
+  const byId = (id)=>document.getElementById(id);
 
-    formLogin.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (submitting) return;
-      submitting = true;
+  document.body.classList.remove('auth'); // CSS ocultará lo privado
+  byId('splash')?.setAttribute('style','display:none;');
 
-      const email = $('login-usuario')?.value?.trim().toLowerCase() || '';
-      const password = $('login-password')?.value || '';
+  // ocultar privado
+  byId('zona-privada')?.setAttribute('style','display:none;');
+  byId('barra-superior')?.setAttribute('style','display:none;');
+  byId('menu-vistas')?.setAttribute('style','display:none;');
+  document.querySelectorAll('.vista').forEach(v => v.style.display = 'none');
 
-      try {
-        const resp = await fetch('/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-          credentials: 'same-origin'
-        });
+  // mostrar contenedor y secciones de usuario
+  const contenido = byId('contenido-app');
+  if (contenido) {
+    contenido.style.display    = 'block';
+    contenido.style.visibility = 'visible';
+    contenido.style.opacity    = '1';
+  }
+  byId('usuario')?.setAttribute('style','display:block;');
+  byId('seccion-usuario')?.setAttribute('style','display:block;');
+  byId('seccion-login')?.setAttribute('style','display:block;');
+  byId('seccion-registro')?.setAttribute('style','display:block;');
 
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || data?.error || data?.ok === false) {
-          await Swal?.fire({ icon:'error', title:'Login fallido', text: data?.error || 'Usuario o contraseña incorrectos' });
-          return;
-        }
+  // limpiar “activo” en menú
+  byId('menu-vistas')?.querySelectorAll('button[data-vista]')?.forEach(b => b.classList.remove('is-active'));
+}
 
-        // === ÚNICO flujo post-login ===
-        try { sessionStorage.setItem('usuario', JSON.stringify({ id: data.id, email: data.email || email, nombre: data.nombre || data.email || email })); } catch {}
-        if (typeof enforceAuthView === 'function') enforceAuthView();
-        if (typeof iniciarZonaPrivada === 'function') iniciarZonaPrivada();
-      } catch (err) {
-        console.error('Error en login:', err);
-        await Swal?.fire({ icon:'error', title:'Error de conexión' });
-      } finally {
-        submitting = false;
-      }
-    });
+// 3) Exponer globales (clave)
+window.mostrarZonaPrivada  = mostrarZonaPrivada;
+window.mostrarVistaUsuario = window.mostrarVistaUsuario || mostrarVistaUsuario;
+
+// 4) (Opcional) asegurar botón cerrar si el DOM ya existe
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('cerrar-sesion-barra');
+  if (btn) { btn.type = 'button'; btn.onclick = window.cerrarSesion || btn.onclick; }
+}, { once:true });
+});
+// -----------------------------------
+//  Globals mínimos
+// -----------------------------------
+W.configFuentesIngresos ||= [];
+W.ingresos ||= [];
+
+// -----------------------------------
+//  Helper de deduplicación (anti-race)
+//  Si luego tu backend devuelve id: usa i.id ?? claveIngreso(i)
+// -----------------------------------
+function claveIngreso(i) {
+  return [
+    String(i?.fecha || ""),
+    Number(i?.monto || 0),
+    String(i?.fuente || ""),
+    String(i?.nota || "")
+  ].join("||");
+}
+
+// -----------------------------------
+//  Rellenar selects de fuentes (solo Config)
+// -----------------------------------
+function llenarSelectFuentesIngresos() {
+  const select = document.getElementById("fuente-ingreso");
+  const filtro = document.getElementById("filtro-fuente-ingreso");
+  if (!select && !filtro) return;
+
+  const fuentesRaw =
+    (Array.isArray(W.configFuentesIngresos) && W.configFuentesIngresos.length
+      ? W.configFuentesIngresos
+      : (Array.isArray(W.configTemporal?.ingresos_fuentes)
+          ? W.configTemporal.ingresos_fuentes
+          : []
+        )
+    );
+
+  const fuentes = [...new Set(
+    (fuentesRaw || []).map(f => String(f).trim()).filter(Boolean)
+  )];
+
+  // Form
+  if (select) {
+    const valorActual = select.value;
+    select.innerHTML = `<option value="" disabled selected>Selecciona fuente</option>`;
+    fuentes.forEach(f => select.appendChild(new Option(f, f)));
+    if (fuentes.includes(valorActual)) select.value = valorActual;
   }
 
-  // ---- Mostrar/ocultar vistas (sin duplicar) ----
-  if (!window.mostrarZonaPrivada) {
-    window.mostrarZonaPrivada = function mostrarZonaPrivada(usuario = {}) {
-      $('usuario')?.setAttribute('style','display:none;');
-      $('zona-privada')?.setAttribute('style','display:block;');
-      $('barra-superior')?.setAttribute('style','display:flex;');
-      $('menu-vistas')?.setAttribute('style','display:flex;');
-      const nombre = $('nombre-usuario-barra');
-      if (nombre) nombre.textContent = (usuario.nombre || usuario.email || nombre.textContent || '');
-      // cargar config/perfil si hace falta (idempotente)
-      try { cargarConfigYAplicar?.().finally(() => cargarPerfilEnUI?.()); } catch {}
-    };
+  // Filtro
+  if (filtro) {
+    const valorFiltro = filtro.value;
+    filtro.innerHTML = `<option value="">Todas</option>`;
+    fuentes.forEach(f => filtro.appendChild(new Option(f, f)));
+    if (fuentes.includes(valorFiltro)) filtro.value = valorFiltro;
   }
-
-  if (!window.mostrarPantallaLogin) {
-    window.mostrarPantallaLogin = function mostrarPantallaLogin() {
-      $('zona-privada')?.setAttribute('style','display:none;');
-      $('barra-superior')?.setAttribute('style','display:none;');
-      $('menu-vistas')?.setAttribute('style','display:none;');
-      $('usuario')?.setAttribute('style','display:block;');
-      $('seccion-usuario')?.setAttribute('style','display:block;');
-      $('seccion-registro')?.setAttribute('style','display:block;');
-      $('seccion-login')?.setAttribute('style','display:block;');
-    };
-  }
-
-  if (!window.enforceAuthView) {
-    window.enforceAuthView = function enforceAuthView() {
-      const u = JSON.parse(sessionStorage.getItem('usuario') || '{}');
-      const contenido = $('contenido-app');
-      if (contenido) { contenido.style.display = 'block'; contenido.style.visibility = 'visible'; contenido.style.opacity = '1'; }
-      if (u?.email) window.mostrarZonaPrivada?.(u);
-      else window.mostrarPantallaLogin?.();
-    };
-  }
-})();
+}
+W.llenarSelectFuentesIngresos = llenarSelectFuentesIngresos;
 
 // -----------------------------------
 //  Main
@@ -3327,27 +3163,49 @@ document.addEventListener("DOMContentLoaded", () => {
   // ------------------------------
   //  Cargar desde servidor (fusiona, no pisa)
   // ------------------------------
+  // ==== LOADERS: INGRESOS ====
+
 let _ingresosFiltrosRegistrados = false;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const filtroMesIngreso    = document.getElementById("filtro-mes-ingreso");
-  const filtroFuenteIngreso = document.getElementById("filtro-fuente-ingreso");
+async function cargarIngresos({ firstRender = true } = {}) {
+  try {
+    const data = await fetchJSON('/cargar_ingresos', { method: 'GET' });
+    const nuevos = Array.isArray(data) ? data : (data?.ingresos || []);
 
-  // resetea filtros en primer render
-  if (filtroMesIngreso)    filtroMesIngreso.value = "";
-  if (filtroFuenteIngreso) filtroFuenteIngreso.value = "";
+    window.W = window.W || {};
+    W.ingresos = Array.isArray(W.ingresos) ? W.ingresos : [];
 
-  if (!_ingresosFiltrosRegistrados) {
-    const debouncedMostrar = debounce(() => mostrarIngresos(), 180);
-    filtroMesIngreso?.addEventListener("input", debouncedMostrar);
-    filtroFuenteIngreso?.addEventListener("input", debouncedMostrar);
-    _ingresosFiltrosRegistrados = true;
+    // misma fusión que tenías
+    const claveIngreso = i => `${i.fecha}|${i.monto}|${i.fuente}|${i.nota || ''}`;
+    const mapa = new Map(W.ingresos.map(i => [claveIngreso(i), i]));
+    (nuevos || []).forEach(i => mapa.set(claveIngreso(i), i));
+    W.ingresos = Array.from(mapa.values());
+
+    // Solo en el primer render: resetea filtros y registra listeners (una sola vez)
+    if (firstRender) {
+      if (typeof filtroMesIngreso !== 'undefined' && filtroMesIngreso)    filtroMesIngreso.value = "";
+      if (typeof filtroFuenteIngreso !== 'undefined' && filtroFuenteIngreso) filtroFuenteIngreso.value = "";
+
+      if (!_ingresosFiltrosRegistrados) {
+        const debouncedMostrar = debounce(() => mostrarIngresos(), 180);
+        if (typeof filtroMesIngreso !== 'undefined' && filtroMesIngreso)
+          filtroMesIngreso.addEventListener("input", debouncedMostrar);
+        if (typeof filtroFuenteIngreso !== 'undefined' && filtroFuenteIngreso)
+          filtroFuenteIngreso.addEventListener("input", debouncedMostrar);
+        _ingresosFiltrosRegistrados = true;
+      }
+    }
+
+    if (typeof mostrarIngresos === 'function') mostrarIngresos();
+  } catch (err) {
+    console.error("❌ Error al cargar ingresos:", err);
+    window.W = window.W || {};
+    W.ingresos = Array.isArray(W.ingresos) ? W.ingresos : [];
+    if (typeof mostrarIngresos === 'function') mostrarIngresos();
+    try { toastErr('No se pudieron cargar los ingresos'); } catch {}
   }
+}
 
-  // llenar select fuentes y cargar datos
-  llenarSelectFuentesIngresos?.();
-  cargarIngresos?.();
-});
 
  // ------------------------------
 // Submit (alta/edición) con optimista
@@ -4861,6 +4719,91 @@ function eliminarPago(i) {
 // =============================
 // DISPONIBLE (pintado central)
 // =============================
+function refrescarDisponibleGlobal() {
+  const paneles = document.querySelectorAll('[data-disponible-panel]');
+  if (!paneles.length) return;
+
+  paneles.forEach(panel => {
+    const sourceId = panel.getAttribute('data-mes-source') || '';
+    const mesSel = sourceId ? (document.getElementById(sourceId)?.value || '') : '';
+    disponibleMes(mesSel, ({ nombreMes, ingresos, egresos, disponible }) => {
+      panel.innerHTML = `
+        💵 <strong>Disponible</strong> en <em>${nombreMes}</em>:
+        <strong>$${(disponible || 0).toFixed(2)}</strong>
+        <small style="display:block;opacity:.7">
+          Ingresos $${(ingresos||0).toFixed(2)} — Egresos $${(egresos||0).toFixed(2)}
+        </small>
+      `;
+    });
+  });
+}
+
+function wireDisponibleAuto() {
+  // 1) Enlazar carga/normalización de egresos
+  const prevCargar = window.cargarYNormalizarEgresos;
+  if (typeof prevCargar === 'function' && !prevCargar._wiredDisponible) {
+    window.cargarYNormalizarEgresos = function(cb) {
+      prevCargar(() => {
+        try { refrescarDisponibleGlobal(); } catch {}
+        cb && cb();
+      });
+    };
+    window.cargarYNormalizarEgresos._wiredDisponible = true;
+  }
+
+  // 2) Enlazar cambio de vista
+  const prevMostrarVista = window.mostrarVista;
+  if (typeof prevMostrarVista === 'function' && !prevMostrarVista._wiredDisponible) {
+    window.mostrarVista = function(idVista) {
+      prevMostrarVista(idVista);
+      try { refrescarDisponibleGlobal(); } catch {}
+    };
+    window.mostrarVista._wiredDisponible = true;
+  }
+
+  // 3) Enlazar aplicar configuración
+  const prevAplicarCfg = window.aplicarConfiguracion;
+  if (typeof prevAplicarCfg === 'function' && !prevAplicarCfg._wiredDisponible) {
+    window.aplicarConfiguracion = function(cfg) {
+      prevAplicarCfg(cfg);
+      try { refrescarDisponibleGlobal(); } catch {}
+    };
+    window.aplicarConfiguracion._wiredDisponible = true;
+  }
+
+  // 4) Enlazar altas/bajas de ingresos/egresos
+  ['guardarIngreso','eliminarIngreso','guardarEgreso','eliminarEgreso'].forEach(fn => {
+    const prev = window[fn];
+    if (typeof prev === 'function' && !prev?._wiredDisponible) {
+      window[fn] = function(...args) {
+        const r = prev.apply(this, args);
+        Promise.resolve(r).finally(() => { try { refrescarDisponibleGlobal(); } catch {} });
+        return r;
+      };
+      window[fn]._wiredDisponible = true;
+    }
+  });
+
+  // 5) Enlazar cambios de filtros de mes
+  ['filtro-mes-ingreso','filtro-mes-egreso','filtro-mes-bill','filtro-mes-pago'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.wiredDisponible) {
+      el.addEventListener('input', () => { try { refrescarDisponibleGlobal(); } catch {} });
+      el.dataset.wiredDisponible = '1';
+    }
+  });
+
+  // 6) Primer pintado
+  try { refrescarDisponibleGlobal(); } catch {}
+}
+
+// === Tooltips en móviles: muestra data-tip ~1s al tocar ===
+document.addEventListener("touchstart", (e) => {
+  const btn = e.target.closest(".icon-btn[data-tip]");
+  if (!btn) return;
+  btn.classList.add("tip-show");
+  setTimeout(() => btn.classList.remove("tip-show"), 1200);
+}, { passive: true });
 
 function marcarListasGrid() {
   ["lista-ingresos","lista-bills","lista-egresos-personales","lista-pagos"]
@@ -4936,3 +4879,139 @@ async function cargarEgresos() {
   }
 }
 
+async function cargarEgresos() {
+  try {
+    await new Promise((resolve, reject) => {
+      try {
+        cargarYNormalizarEgresos(() => {
+          try { mostrarEgresos?.(); } finally { resolve(); }
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  } catch (err) {
+    if (String(err?.message || '').includes('401')) {
+      mostrarPantallaLogin?.();
+      if (Array.isArray(window.egresos)) egresos.length = 0;
+      mostrarEgresos?.();
+      return;
+    }
+    console.error('Error al cargar egresos:', err);
+  }
+}
+
+async function cargarConfiguracion() {
+  try {
+    const cfg = await fetchJSON('/cargar_configuracion', { method: 'GET' }, { silent401: true });
+    if (!cfg) return;
+    aplicarConfiguracionSegura(cfg, 'cargarConfiguracion');
+  } catch (e) {
+    console.error('Error al cargar configuración:', e);
+  }
+}
+// =============
+// === Boot ===
+// =============
+function ensureSplash() {
+  let splash = document.getElementById('splash');
+  if (!splash) {
+    splash = document.createElement('div');
+    splash.id = 'splash';
+    splash.innerHTML = `<img src="/static/fondos/logo.png" alt="Splash">`;
+    document.body.prepend(splash);
+  }
+  return splash;
+}
+
+function startSplashAnim() {
+  const splash = ensureSplash();
+
+  const fireAnim = (el) => {
+    el.classList.remove('splash-anim');
+    void el.offsetWidth;                 // reflow para reiniciar animación
+    el.classList.add('splash-anim');
+  };
+
+  const img = splash.querySelector('img');
+  fireAnim(img || splash);               // preferimos animar <img>, si no, el contenedor
+}
+
+// Dispara cuando el DOM está listo y también en load
+document.addEventListener('DOMContentLoaded', startSplashAnim, { once:true });
+window.addEventListener('load', startSplashAnim, { once:true });
+
+async function iniciarZonaPrivada() {
+  // 1) Config primero (muchas vistas dependen de ella)
+  if (typeof cargarConfiguracion === 'function') {
+    try { await cargarConfiguracion(); } catch (e) { console.warn('cargarConfiguracion falló:', e); }
+  }
+
+  // 2) Lo demás en paralelo
+  const tareas = [];
+  if (typeof cargarBills === 'function')      tareas.push(cargarBills());
+  if (typeof cargarIngresos === 'function')   tareas.push(cargarIngresos());
+  if (typeof cargarEgresos === 'function')    tareas.push(cargarEgresos());
+  if (typeof cargarPagos === 'function')      tareas.push(cargarPagos());
+  if (typeof cargarPerfilEnUI === 'function') tareas.push(cargarPerfilEnUI());
+  await Promise.allSettled(tareas);
+
+  // 3) Post-procesos UI
+  aplanarListas?.();
+  marcarListasGrid?.();
+  wirePagosUI?.();
+  wireDisponibleAuto?.();
+  refrescarDisponibleGlobal?.();
+}
+
+async function boot() {
+  // a) Defaults públicos
+  try {
+    const cfg = await fetchJSON('/config_default', { method: 'GET' }, { silent401: true });
+    if (cfg) aplicarConfiguracionSegura(cfg, 'boot:config_default');
+  } catch (e) {
+    console.warn('No se pudo cargar config_default:', e);
+  }
+
+  // b) Sesión con try/catch (si hay error de red/500, no dejes el splash colgado)
+  let ses = null;
+  try {
+    ses = await fetchJSON('/session', { method: 'GET' }, { silent401: true });
+  } catch (e) {
+    console.error('Error consultando /session:', e);
+    _marcarSesion(false);
+    mostrarPantallaLogin?.();
+    requestAnimationFrame(() => ocultarSplash?.());
+    return;
+  }
+
+  // c) Sin usuario
+if (!ses || ses.ok === false || !ses.user) {
+  _marcarSesion(false);
+  // PRIMERO ocultamos el splash y LUEGO mostramos el login
+  ocultarSplash(() => {
+    mostrarPantallaLogin?.();
+    enforceAuthView?.();
+  });
+  return;
+}
+
+// d) Autenticado
+_marcarSesion(true);
+const user = ses.user || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
+try { sessionStorage.setItem('usuario', JSON.stringify(user)); } catch {}
+
+await iniciarZonaPrivada(); // carga datos
+// PRIMERO ocultamos el splash y LUEGO mostramos la zona privada (si no la mostraste antes)
+ocultarSplash(() => {
+  mostrarZonaPrivada?.(user);
+  checkAccountStatus?.();
+  enforceAuthView?.();
+});
+}
+
+// --- registrar accesos globales ---
+registerGlobals(); // con la versión “segura” ya no hace falta el try/catch
+
+// 3) ÚNICO listener de arranque (asegúrate de no tener otro en el archivo)
+document.addEventListener('DOMContentLoaded', boot);
