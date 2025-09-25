@@ -2822,8 +2822,44 @@ function reiniciarTemporizadorInactividad() {
     });
   });
 
+  // --- Limpia UI del login (idempotente) ---
+function limpiarLoginUI() {
+  const form = document.getElementById('form-login');
+  const u = document.getElementById('login-usuario');
+  const p = document.getElementById('login-password');
+
+  // Resetea el form
+  try { form?.reset(); } catch {}
+
+  // Fuerza limpieza por si el navegador insiste con autofill
+  if (u) {
+    u.value = '';
+    u.setAttribute('autocomplete', 'off');
+  }
+  if (p) {
+    p.type = 'password'; // por si quedó el "ojo" en text
+    p.value = '';
+    p.setAttribute('autocomplete', 'new-password');
+  }
+
+  // Limpia clases de error si existen
+  document.querySelectorAll('#form-login .is-invalid, #form-login .error')
+    .forEach(n => n.classList.remove('is-invalid','error'));
+
+  // Restablece icono del “ojo”, si lo usas
+  document.querySelectorAll('#form-login .boton-ojo').forEach(btn => {
+    const input = btn.previousElementSibling;
+    if (input && input.type !== 'password') {
+      input.type = 'password';
+      btn.textContent = '👁️';
+    }
+  });
+
+  // Foco al usuario
+  setTimeout(() => { u?.focus(); }, 0);
+}
+
   // 🔒 Cerrar sesión
-// 🔒 Cerrar sesión (sin recargar la página)
 async function cerrarSesion(e) {
   e?.preventDefault?.();
 
@@ -2856,7 +2892,9 @@ async function cerrarSesion(e) {
       showConfirmButton: false
     });
   }
-
+  
+  try { limpiarLoginUI(); } catch {}
+  
   // 4) Volver a la pantalla de login (usa tu helper si existe)
   if (typeof window.mostrarPantallaLogin === 'function') {
     window.mostrarPantallaLogin();
