@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from dotenv import load_dotenv
+import stripe
 
 load_dotenv()
 
@@ -18,16 +19,20 @@ TRIAL_DAYS  = int(os.getenv("TRIAL_DAYS", "7"))
 # Config Flask
 # ---------------------------
 app = Flask(__name__, static_folder=None)
+
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY no configurada")
 app.secret_key = SECRET_KEY
 
-# Cookies de sesión más seguras (ajusta SECURE según si usas HTTPS)
+# ⚠️ Leer desde .env (no lo fuerces a True en local)
+SESSION_COOKIE_SECURE_ENV = os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true"
+SESSION_COOKIE_SAMESITE_ENV = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
+
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=True   # <- en Render es HTTPS, ponlo en True
+    SESSION_COOKIE_SAMESITE=SESSION_COOKIE_SAMESITE_ENV,
+    SESSION_COOKIE_SECURE=SESSION_COOKIE_SECURE_ENV
 )
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -41,6 +46,202 @@ engine = create_engine(
     max_overflow=10,
     future=True,
 )
+
+from datetime import datetime, timezone, timedelta
+from math import ceil
+
+def _g(obj, key, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+def _to_dt(ts):
+    try:
+        if ts is None:
+            return None
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc)  # Stripe: segundos
+    except Exception:
+        return None
+
+def _to_iso(val):
+    dt = val if isinstance(val, datetime) else _to_dt(val)
+    return dt.isoformat() if dt else None
+
+def add_months_utc(dt, months=1):
+    """Suma meses evitando líos con 29/30/31 (clamp a día 28)."""
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    y = dt.year
+    m = dt.month + months
+    y += (m - 1) // 12
+    m = ((m - 1) % 12) + 1
+    d = min(dt.day, 28)
+    try:
+        return dt.replace(year=y, month=m, day=d)
+    except Exception:
+        return dt + timedelta(days=30*months)  # fallback tosco, pero seguro
+
+def advance_to_future(dt, interval, count=1):
+    """Si dt ≤ ahora, avanza por el intervalo hasta quedar en el futuro."""
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    epsilon = timedelta(minutes=5)
+    if dt > now + epsilon:
+        return dt
+
+    c = max(1, int(count or 1))
+    if interval == "month":
+        for _ in range(24):
+            dt = add_months_utc(dt, c)
+            if dt > now + epsilon:
+                return dt
+    elif interval == "week":
+        step = timedelta(weeks=c)
+        while dt <= now + epsilon:
+            dt += step
+        return dt
+    elif interval == "day":
+        step = timedelta(days=c)
+        while dt <= now + epsilon:
+            dt += step
+        return dt
+    elif interval == "year":
+        for _ in range(10):
+            dt = add_months_utc(dt, 12*c)
+            if dt > now + epsilon:
+                return dt
+    return dt
+
+def _human_next_message(days):
+    """Texto lindo + emoji para el contador."""
+    if days is None:
+        return None
+    if days <= 0:
+        return "El cobro es hoy 🎉"
+    if days == 1:
+        return "Mañana ✨"
+    if days <= 3:
+        return f"Faltan {days} días ⏳"
+    if days == 7:
+        return "En una semana 🗓️"
+    if days >= 28:
+        return "En ~1 mes 📆"
+    return f"Faltan {days} días 📅"
+
+def _es_fecha_corta(dt):
+    """'26 sep 2025' (sin depender de locale del server)."""
+    if not isinstance(dt, datetime):
+        return None
+    meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]
+    return f"{dt.day:02d} {meses[dt.month-1]} {dt.year}"
+
+def _auto_promo_id():
+    """Devuelve el promotion_code.id a usar:
+       1) el que tenga metadata.default en {'1','true','yes','si','sí'}
+       2) si no hay, el más reciente activo
+       3) si no hay activos, None
+    """
+    try:
+        pcs = stripe.PromotionCode.list(active=True, limit=100)
+        data = getattr(pcs, "data", []) or []
+
+        # Prioridad por metadata.default
+        def _is_default(p):
+            meta = getattr(p, "metadata", None) or {}
+            v = str(meta.get("default", "")).lower()
+            return v in {"1", "true", "yes", "si", "sí"}
+
+        for p in data:
+            if _is_default(p):
+                return p.id
+
+        # Si no hay default, usa el más reciente activo
+        data.sort(key=lambda p: getattr(p, "created", 0), reverse=True)
+        return data[0].id if data else None
+    except Exception as e:
+        print("[_auto_promo_id] lookup failed:", repr(e))
+        return None
+
+# ===========================
+# Stripe config (TEST / LIVE)
+# ===========================
+import stripe
+from flask import jsonify, session
+from datetime import datetime, timezone
+
+STRIPE_MODE = (os.getenv("STRIPE_MODE", "test") or "test").lower()  # 'test' | 'live'
+if STRIPE_MODE not in ("test", "live"):
+    STRIPE_MODE = "test"
+
+def _pick(suffix: str) -> str:
+    # Lee STRIPE_<SUFFIX>_TEST o STRIPE_<SUFFIX>_LIVE, según STRIPE_MODE
+    return os.getenv(f"STRIPE_{suffix}_{STRIPE_MODE.upper()}", "") or os.getenv(f"STRIPE_{suffix}", "") or ""
+
+STRIPE_SECRET_KEY     = _pick("SECRET_KEY")       # sk_...
+STRIPE_PRICE_ID       = _pick("PRICE_ID")         # price_...
+STRIPE_WEBHOOK_SECRET = _pick("WEBHOOK_SECRET")   # whsec_...
+PUBLIC_BASE_URL       = os.getenv("PUBLIC_BASE_URL", "http://localhost:5000")
+
+stripe.api_key = STRIPE_SECRET_KEY
+
+# Log útil en consola del server
+print(f"[stripe] MODE={STRIPE_MODE} | PRICE={STRIPE_PRICE_ID or '—'} | webhook_secret_set={bool(STRIPE_WEBHOOK_SECRET)}")
+
+# ============ Debug: ver modo y claves cargadas ============
+@app.get("/_debug_stripe_mode")
+def _debug_stripe_mode():
+    # Protegido: requiere sesión
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "No autorizado"}), 401
+
+    def mask(s: str | None):
+        return (s[:10] + "…") if s else None
+
+    return jsonify({
+        "ok": True,
+        "mode": STRIPE_MODE,                    # 'test' o 'live'
+        "api_key_set": bool(STRIPE_SECRET_KEY),
+        "price_id": mask(str(STRIPE_PRICE_ID)),
+        "webhook_secret_set": bool(STRIPE_WEBHOOK_SECRET),
+    })
+
+# (opcionales) helpers que quizá usas en otros lados
+def _stripe_get_customer_id_by_email(email: str) -> str | None:
+    if not email:
+        return None
+    try:
+        res = stripe.Customer.list(email=email, limit=1)
+        if res and getattr(res, "data", []):
+            return res.data[0].id
+    except Exception:
+        pass
+    return None
+
+def _dt_from_unix(ts):
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc) if ts else None
+    except Exception:
+        return None
+
+def _stripe_get_active_subscription(customer_id: str):
+    """Devuelve la suscripción activa (o None)."""
+    if not customer_id:
+        return None
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+        if subs and getattr(subs, "data", []):
+            return subs.data[0]
+    except Exception:
+        pass
+    return None
+
 from functools import wraps
 
 def login_required(f):
@@ -166,28 +367,25 @@ def login():
             if not row or not check_password_hash(row["password_hash"], password):
                 return jsonify({"ok": False, "error": "Usuario o contraseña inválidos"}), 401
 
-            if not row["is_active"]:
-                return jsonify({"ok": False, "error": "Cuenta desactivada"}), 403
+            # ✅ NO bloqueamos por is_active/trial aquí
+            plan       = row["plan"]
+            is_active  = bool(row["is_active"])
+            trial_end  = row["trial_ends_at"]
 
-            # calcular días restantes (solo aplica a trial)
+            # días de trial que quedan (solo informativo)
             days_left = None
-            if row["plan"] == "trial" and row["trial_ends_at"]:
-                days_left = (row["trial_ends_at"].date() - datetime.now(timezone.utc).date()).days
+            if plan == "trial" and trial_end:
+                days_left = (trial_end.date() - datetime.now(timezone.utc).date()).days
 
-                # trial vencido → bloquear login
-                if days_left < 0:
-                    return jsonify({
-                        "ok": False,
-                        "error": "Prueba finalizada — requiere suscripción",
-                        "plan": row["plan"],
-                        "days_left": days_left
-                    }), 402
+            # Si necesita pagar: (trial vencido) o (plan pago inactivo)
+            trial_expired = (plan == "trial" and trial_end and trial_end < datetime.now(timezone.utc))
+            needs_subscription = trial_expired or (plan == "paid" and not is_active)
 
             # último login
-            conn.execute(text("UPDATE users SET last_login_at = now() WHERE id = :id"),
+            conn.execute(text("UPDATE users SET last_login_at = NOW() WHERE id = :id"),
                          {"id": row["id"]})
 
-        # login OK → setear sesión
+        # login OK → setear sesión SIEMPRE
         session.clear()
         session["user_id"] = int(row["id"])
         session["email"]   = (row["email"] or "").lower()
@@ -197,8 +395,10 @@ def login():
             "id": row["id"],
             "email": row["email"],
             "nombre": row["name"],
-            "plan": row["plan"],
-            "days_left": days_left  # null si es paid o sin fecha
+            "plan": plan,
+            "is_active": is_active,
+            "days_left": days_left,                # null si es paid o sin fecha
+            "needs_subscription": needs_subscription
         })
     except SQLAlchemyError as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -227,6 +427,114 @@ def account_status():
     if u and u["trial_ends_at"]:
         days_left = (u["trial_ends_at"].date() - datetime.now(timezone.utc).date()).days
     return jsonify({"ok": True, **u, "days_left": days_left})
+
+# === Verifica sesión de Stripe al volver del checkout y activa la cuenta
+@app.get("/checkout_verify")
+@login_required
+def checkout_verify():
+    sid = request.args.get("session_id", "").strip()
+    if not sid:
+        return jsonify({"ok": False, "error": "session_id requerido"}), 400
+
+    uid = session["user_id"]
+
+    try:
+        # 1) Traer Checkout Session + Subscription
+        cs = stripe.checkout.Session.retrieve(sid, expand=["subscription"])
+        cust_id = getattr(cs, "customer", None)
+        sub_id  = None
+
+        sub_obj = getattr(cs, "subscription", None)
+        if isinstance(sub_obj, str):
+            sub_id = sub_obj
+            sub_obj = stripe.Subscription.retrieve(
+                sub_id,
+                expand=["latest_invoice", "schedule.phases", "items.data.price"]
+            )
+        elif sub_obj:
+            sub_id = getattr(sub_obj, "id", None)
+
+        if not sub_id:
+            return jsonify({"ok": True, "is_active": False, "reason": "no subscription in session"})
+
+        # 2) Estado + próxima fecha
+        status = getattr(sub_obj, "status", None)
+        is_active = status in ("active", "trialing")
+
+        def _to_dt(ts):
+            from datetime import datetime, timezone
+            try:
+                return datetime.fromtimestamp(int(ts), tz=timezone.utc) if ts else None
+            except Exception:
+                return None
+
+        next_ch = _to_dt(getattr(sub_obj, "current_period_end", None))
+
+        # fallback: latest_invoice.period_end
+        if not next_ch:
+            li = getattr(sub_obj, "latest_invoice", None)
+            if isinstance(li, str) and li:
+                try:
+                    li = stripe.Invoice.retrieve(li, expand=["lines.data"])
+                except Exception:
+                    li = None
+            if li:
+                ts = getattr(li, "period_end", None)
+                if ts:
+                    next_ch = _to_dt(ts)
+                elif getattr(li, "lines", None) and getattr(li.lines, "data", None):
+                    per = getattr(li.lines.data[0], "period", None)
+                    next_ch = _to_dt(getattr(per, "end", None)) if per else None
+
+        # 3) Persistir TODO
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE users
+                   SET plan                 = 'paid',
+                       is_active            = :act,
+                       stripe_customer_id   = COALESCE(:cid, stripe_customer_id),
+                       stripe_subscription_id = :sid,
+                       next_charge_at       = :nca,
+                       updated_at           = NOW()
+                 WHERE id = :uid
+            """), {
+                "act": is_active,
+                "cid": cust_id,
+                "sid": sub_id,
+                "nca": next_ch,
+                "uid": uid
+            })
+
+        return jsonify({
+            "ok": True,
+            "is_active": is_active,
+            "status": status,
+            "subscription_id": sub_id,
+            "next_charge_at": next_ch.isoformat() if next_ch else None
+        })
+    except Exception as e:
+        print("[checkout_verify] error:", repr(e))
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+@app.post("/create_checkout_session")
+@login_required
+def create_checkout_session():
+    u = current_user()
+    try:
+        checkout = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+            success_url=f"{PUBLIC_BASE_URL}/?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{PUBLIC_BASE_URL}/?checkout=cancel",
+            client_reference_id=str(u["id"]),
+            customer_email=u.get("email"),
+            allow_promotion_codes=True,   # 👈 Stripe muestra la cajita de “¿tienes un código?”
+        )
+        return jsonify({"ok": True, "url": checkout.url})
+    except stripe.error.StripeError as e:
+        return jsonify({"ok": False, "error": getattr(e, "user_message", None) or str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 # ===========================
 # Compat: detector de columnas
@@ -1130,6 +1438,694 @@ def eliminar_pago():
     except SQLAlchemyError as e:
         return json_error(str(e), 500)
 
+# ======================
+# === Campanita ========
+# ======================
+# app.py — DEBUG local: ver fila del usuario logueado
+@app.get("/_debug_user")
+@login_required
+def _debug_user():
+    from datetime import datetime, timezone
+    def iso(dt):
+        if isinstance(dt, datetime):
+            return dt.astimezone(timezone.utc).isoformat()
+        return None
+
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT id, email, plan, is_active,
+                   trial_ends_at, next_charge_at,
+                   stripe_customer_id, stripe_subscription_id,
+                   updated_at
+            FROM users
+            WHERE id = :id
+        """), {"id": session["user_id"]}).mappings().first()
+
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    out = dict(row)
+    out["trial_ends_at"]  = iso(out.get("trial_ends_at"))
+    out["next_charge_at"] = iso(out.get("next_charge_at"))
+    out["updated_at"]     = iso(out.get("updated_at"))
+    return jsonify({"ok": True, "user": out})
+
+# ============ WEBHOOK ÚNICO ============
+@app.post("/webhook")
+def stripe_webhook():
+    payload = request.get_data(as_text=False)
+    sig = request.headers.get("Stripe-Signature", "")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=payload, sig_header=sig, secret=STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        return "Invalid payload", 400
+    except stripe.error.SignatureVerificationError:
+        return "Invalid signature", 400
+
+    etype = event.get("type", "")
+    obj = event.get("data", {}).get("object", {})
+
+    def _dt_from_unix(ts):
+        try:
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc) if ts else None
+        except Exception:
+            return None
+
+    def _next_charge_from_sub(sub_or_id):
+        try:
+            sub = stripe.Subscription.retrieve(sub_or_id) if isinstance(sub_or_id, str) else sub_or_id
+            cpe = getattr(sub, "current_period_end", None) if sub else None
+            return _dt_from_unix(cpe)
+        except Exception:
+            return None
+
+    def _save_activation(uid=None, email=None, cust_id=None, sub_id=None, next_charge=None):
+        if not uid and not email:
+            return
+        with engine.begin() as conn:
+            params = {"cust_id": cust_id, "sub_id": sub_id, "next_charge": next_charge}
+            if uid:
+                conn.execute(text("""
+                    UPDATE users SET
+                      plan='paid', is_active=true, trial_ends_at=NULL,
+                      stripe_customer_id = COALESCE(:cust_id, stripe_customer_id),
+                      stripe_subscription_id = COALESCE(:sub_id, stripe_subscription_id),
+                      next_charge_at = COALESCE(:next_charge, next_charge_at),
+                      last_payment_at = NOW(), updated_at = NOW()
+                    WHERE id = :uid
+                """), {**params, "uid": int(uid)})
+            else:
+                conn.execute(text("""
+                    UPDATE users SET
+                      plan='paid', is_active=true, trial_ends_at=NULL,
+                      stripe_customer_id = COALESCE(:cust_id, stripe_customer_id),
+                      stripe_subscription_id = COALESCE(:sub_id, stripe_subscription_id),
+                      next_charge_at = COALESCE(:next_charge, next_charge_at),
+                      last_payment_at = NOW(), updated_at = NOW()
+                    WHERE lower(email) = lower(:email)
+                """), {**params, "email": email})
+
+    def _deactivate(uid=None, email=None):
+        if not uid and not email:
+            return
+        with engine.begin() as conn:
+            if uid:
+                conn.execute(text("UPDATE users SET is_active=false, updated_at=NOW() WHERE id=:uid"),
+                             {"uid": int(uid)})
+            else:
+                conn.execute(text("UPDATE users SET is_active=false, updated_at=NOW() WHERE lower(email)=lower(:email)"),
+                             {"email": email})
+
+    # --- eventos clave ---
+    if etype == "checkout.session.completed":
+        cust_id = obj.get("customer")
+        sub_id  = obj.get("subscription")
+        next_charge_at = _next_charge_from_sub(sub_id) if sub_id else None
+        _save_activation(
+            uid=obj.get("client_reference_id"),
+            email=(obj.get("customer_details") or {}).get("email") or obj.get("customer_email"),
+            cust_id=cust_id, sub_id=sub_id, next_charge=next_charge_at
+        )
+
+    elif etype == "invoice.payment_succeeded":
+        cust_id = obj.get("customer")
+        sub_id  = obj.get("subscription")
+        next_charge_at = _next_charge_from_sub(sub_id) if sub_id else None
+        email = None
+        try:
+            if cust_id:
+                cust = stripe.Customer.retrieve(cust_id)
+                email = getattr(cust, "email", None)
+        except Exception:
+            pass
+        _save_activation(email=email, cust_id=cust_id, sub_id=sub_id, next_charge=next_charge_at)
+
+    elif etype in ("customer.subscription.deleted", "invoice.payment_failed"):
+        email = None
+        try:
+            cust_id = obj.get("customer")
+            if cust_id:
+                cust = stripe.Customer.retrieve(cust_id)
+                email = getattr(cust, "email", None)
+        except Exception:
+            pass
+        _deactivate(email=email)
+
+    return jsonify({"ok": True})
+
+@app.get("/webhook")
+def stripe_webhook_ping():
+    return "Stripe webhook OK (POST only)", 200
+
+@app.get("/checkout_confirm")
+@login_required
+def checkout_confirm():
+    session_id = (request.args.get("session_id") or "").strip()
+    if not session_id:
+        return jsonify({"ok": False, "error": "missing session_id"}), 400
+
+    try:
+        # Trae la Session y expande customer/subscription si es posible
+        cs = stripe.checkout.Session.retrieve(
+            session_id,
+            expand=["subscription", "customer"]
+        )
+
+        status = getattr(cs, "status", None)
+        payst  = getattr(cs, "payment_status", None)
+        uid    = getattr(cs, "client_reference_id", None)
+
+        # customer puede ser id (str) o StripeObject
+        cust = getattr(cs, "customer", None)
+        cust_id = cust if isinstance(cust, str) else getattr(cust, "id", None)
+
+        cdet  = getattr(cs, "customer_details", None)
+        email = (getattr(cdet, "email", None) if cdet else None) or getattr(cs, "customer_email", None)
+
+        # subscription puede ser id, objeto o None
+        sub    = getattr(cs, "subscription", None)
+        if isinstance(sub, str):
+            sub = stripe.Subscription.retrieve(sub)
+        sub_id = getattr(sub, "id", None) if sub else None
+
+        # Fallback: si aún no tenemos sub, búscala por customer
+        if not sub and cust_id:
+            subs = stripe.Subscription.list(customer=cust_id, status="all", limit=10)
+            best = None
+            for s in subs.data or []:
+                if getattr(s, "status", None) in ("active", "trialing"):
+                    best = s
+                    break
+            if not best and (subs.data or []):
+                best = subs.data[0]
+            sub = best
+            sub_id = getattr(sub, "id", None) if sub else None
+
+        # Calcula próxima fecha de cobro
+        next_charge_at = None
+        if sub:
+            cpe = getattr(sub, "current_period_end", None)
+            if cpe:
+                next_charge_at = datetime.fromtimestamp(int(cpe), tz=timezone.utc)
+
+        # Si la sesión está pagada, guarda todo
+        if status == "complete" and payst == "paid":
+            with engine.begin() as conn:
+                params = {"cust_id": cust_id, "sub_id": sub_id, "next_charge": next_charge_at}
+                if uid:
+                    conn.execute(text("""
+                        UPDATE users SET
+                          plan='paid',
+                          is_active=true,
+                          trial_ends_at=NULL,
+                          stripe_customer_id = COALESCE(:cust_id, stripe_customer_id),
+                          stripe_subscription_id = COALESCE(:sub_id, stripe_subscription_id),
+                          next_charge_at = COALESCE(:next_charge, next_charge_at),
+                          last_payment_at = NOW(),
+                          updated_at=NOW()
+                        WHERE id=:uid
+                    """), {"uid": int(uid), **params})
+                elif email:
+                    conn.execute(text("""
+                        UPDATE users SET
+                          plan='paid',
+                          is_active=true,
+                          trial_ends_at=NULL,
+                          stripe_customer_id = COALESCE(:cust_id, stripe_customer_id),
+                          stripe_subscription_id = COALESCE(:sub_id, stripe_subscription_id),
+                          next_charge_at = COALESCE(:next_charge, next_charge_at),
+                          last_payment_at = NOW(),
+                          updated_at=NOW()
+                        WHERE lower(email)=lower(:email)
+                    """), {"email": email, **params})
+
+            return jsonify({
+                "ok": True,
+                "plan": "paid",
+                "next_charge_at": next_charge_at.isoformat() if next_charge_at else None
+            })
+
+        return jsonify({"ok": False, "status": status, "payment_status": payst})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+# === Estado de facturación (lee BD y, si falta, rellena desde Stripe)
+# === Estado de facturación (lee BD y, si falta o está “vencida”, recalcula con Stripe)
+@app.get("/billing_status")
+@login_required
+def billing_status():
+    from datetime import datetime, timezone, timedelta
+
+    def _to_dt(ts):
+        try:
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc) if ts else None
+        except Exception:
+            return None
+
+    def add_months_utc(dt, months=1):
+        if not dt: return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        y = dt.year
+        m = dt.month + months
+        y += (m - 1) // 12
+        m = ((m - 1) % 12) + 1
+        d = min(dt.day, 28)
+        return dt.replace(year=y, month=m, day=d)
+
+    def advance_to_future(dt, interval, count):
+        if not dt: return None
+        now = datetime.now(timezone.utc)
+        n = count or 1
+        cur = dt
+        if interval == "month":
+            while cur <= now:
+                cur = add_months_utc(cur, n)
+        elif interval == "year":
+            while cur <= now:
+                cur = add_months_utc(cur, 12 * n)
+        elif interval == "week":
+            while cur <= now:
+                cur = cur + timedelta(weeks=n)
+        else:
+            while cur <= now:
+                cur = cur + timedelta(days=n)
+        return cur
+
+    # 1) Leer BD
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+          SELECT plan, is_active, trial_ends_at, next_charge_at,
+                 stripe_customer_id, stripe_subscription_id
+          FROM users WHERE id=:id
+        """), {"id": session["user_id"]}).mappings().first()
+
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    plan      = (row["plan"] or "trial")
+    is_active = bool(row["is_active"])
+    trial_end = row["trial_ends_at"]
+    next_ch   = row["next_charge_at"]
+    cust_id   = row.get("stripe_customer_id")
+    sub_id    = row.get("stripe_subscription_id")
+
+    # 2) Si es pago y activo, refrescar si falta o no está en el FUTURO
+    try:
+        need_refresh = False
+        now = datetime.now(timezone.utc)
+        if plan == "paid" and is_active:
+            if not isinstance(next_ch, datetime):
+                need_refresh = True
+            elif next_ch <= now:
+                need_refresh = True
+
+        if need_refresh and (cust_id or sub_id):
+            # Traer sub (id directo o buscando la activa/más reciente)
+            sub = None
+            try:
+                if sub_id:
+                    sub = stripe.Subscription.retrieve(
+                        sub_id, expand=["latest_invoice", "schedule.phases", "items.data.price"]
+                    )
+                if (not sub) or getattr(sub, "status", None) not in ("active", "trialing"):
+                    if cust_id:
+                        lst = stripe.Subscription.list(customer=cust_id, status="all", limit=20)
+                        subs = list(getattr(lst, "data", []) or [])
+                        subs.sort(key=lambda s: getattr(s, "created", 0), reverse=True)
+                        sub = next((s for s in subs if getattr(s, "status", None) in ("active", "trialing")), None) or (subs[0] if subs else None)
+                        if sub:
+                            sub_id = getattr(sub, "id", None)
+            except Exception:
+                sub = None
+
+            # Calcular próxima fecha
+            fresh = None
+            if sub:
+                items = getattr(sub, "items", None)
+                data  = getattr(items, "data", None) or []
+                price = getattr(data[0], "price", None) if data else None
+                recurring = getattr(price, "recurring", None)
+                inter = getattr(recurring, "interval", None) or "month"
+                inter_count = getattr(recurring, "interval_count", None) or 1
+
+                # current_period_end
+                fresh = _to_dt(getattr(sub, "current_period_end", None))
+
+                # latest_invoice
+                if not fresh:
+                    li = getattr(sub, "latest_invoice", None)
+                    if isinstance(li, str) and li:
+                        try:
+                            li = stripe.Invoice.retrieve(li, expand=["lines.data"])
+                        except Exception:
+                            li = None
+                    if li:
+                        fresh = _to_dt(getattr(li, "period_end", None))
+                        if (not fresh) and getattr(li, "lines", None) and getattr(li.lines, "data", None):
+                            per = getattr(li.lines.data[0], "period", None)
+                            fresh = _to_dt(getattr(per, "end", None)) if per else None
+
+                # upcoming invoice (fiable para el siguiente cobro)
+                if not fresh:
+                    up = None
+                    try:
+                        up = stripe.Invoice.upcoming(subscription=getattr(sub, "id", None))
+                    except Exception:
+                        up = None
+                    if not up and cust_id:
+                        try:
+                            up = stripe.Invoice.upcoming(customer=cust_id)
+                        except Exception:
+                            up = None
+                    if up:
+                        ts = getattr(up, "next_payment_attempt", None) or getattr(up, "due_date", None) or getattr(up, "period_end", None)
+                        fresh = _to_dt(ts)
+
+                # Fallback: ancla + intervalo
+                if not fresh:
+                    bca = _to_dt(getattr(sub, "billing_cycle_anchor", None))
+                    if bca:
+                        fresh = add_months_utc(bca, 1 if inter == "month" else (12 if inter == "year" else 0))
+
+                # Normalizar al futuro
+                if fresh:
+                    fresh = advance_to_future(fresh, inter, inter_count)
+
+            # Si obtuvimos algo, persistir y usarlo
+            if fresh:
+                next_ch = fresh
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        UPDATE users
+                           SET stripe_subscription_id = COALESCE(:sid, stripe_subscription_id),
+                               next_charge_at         = :nca,
+                               updated_at             = NOW()
+                         WHERE id = :id
+                    """), {"sid": sub_id, "nca": next_ch, "id": session["user_id"]})
+
+    except Exception as e:
+        print("[billing_status] refresh error:", repr(e))
+
+    # 3) Cálculos de días
+    days_left = None
+    if plan == "trial" and isinstance(trial_end, datetime):
+        days_left = (trial_end.date() - datetime.now(timezone.utc).date()).days
+
+    days_to_next = None
+    if isinstance(next_ch, datetime):
+        seconds = (next_ch - datetime.now(timezone.utc)).total_seconds()
+        # ceil “amigable”: 0 si ya pasó/ocurre hoy
+        days_to_next = max(0, int((seconds + 86399) // 86400))
+
+    # Mensajes humanos
+    def _human_next_message(d):
+        if d is None: return ""
+        if d <= 0: return "El cobro es hoy 🎉"
+        if d == 1: return "Mañana ✨"
+        if d <= 3: return f"Faltan {d} días ⏳"
+        if d == 7: return "En una semana 🗓️"
+        if d >= 28: return "En ~1 mes 📆"
+        return f"Faltan {d} días 📅"
+
+    def _es_fecha_corta(dt):
+        try:
+            meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]
+            d = dt.astimezone(timezone.utc)
+            return f"{d.day:02d} {meses[d.month-1]} {d.year}"
+        except Exception:
+            return None
+
+    return jsonify({
+        "ok": True,
+        "plan": plan,
+        "is_active": is_active,
+        "trial_ends_at": trial_end.isoformat() if isinstance(trial_end, datetime) else None,
+        "next_charge_at": next_ch.isoformat() if isinstance(next_ch, datetime) else None,
+        "days_left": days_left,
+        "days_to_next_charge": days_to_next,
+        "next_charge_message": _human_next_message(days_to_next),
+        "next_charge_date_human": _es_fecha_corta(next_ch) if isinstance(next_ch, datetime) else None
+    })
+
+# === Sincroniza con Stripe, corrige sub cancelada y normaliza próxima fecha al FUTURO
+@app.post("/billing_sync")
+@login_required
+def billing_sync():
+    from datetime import datetime, timezone, timedelta
+    uid = session["user_id"]
+
+    def _to_dt(ts):
+        try:
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc) if ts else None
+        except Exception:
+            return None
+
+    def add_months_utc(dt, months=1):
+        if not dt: return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        y = dt.year
+        m = dt.month + months
+        y += (m - 1) // 12
+        m = ((m - 1) % 12) + 1
+        d = min(dt.day, 28)
+        return dt.replace(year=y, month=m, day=d)
+
+    def advance_to_future(dt, interval, count):
+        """Empuja dt hasta que esté > now, según el intervalo del precio."""
+        if not dt: return None
+        now = datetime.now(timezone.utc)
+        n = count or 1
+        cur = dt
+        if interval == "month":
+            while cur <= now:
+                cur = add_months_utc(cur, n)
+        elif interval == "year":
+            while cur <= now:
+                cur = add_months_utc(cur, 12 * n)
+        elif interval == "week":
+            while cur <= now:
+                cur = cur + timedelta(weeks=n)
+        else:
+            while cur <= now:
+                cur = cur + timedelta(days=n)
+        return cur
+
+    # --- lee lo que hay en BD
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT stripe_subscription_id, stripe_customer_id
+            FROM users WHERE id=:id
+        """), {"id": uid}).mappings().first()
+
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    sub_id  = row.get("stripe_subscription_id")
+    cust_id = row.get("stripe_customer_id")
+
+    try:
+        # 1) Traer la sub guardada; si no sirve, buscar la ACTIVA del customer
+        sub = None
+        status = None
+        if sub_id:
+            try:
+                sub = stripe.Subscription.retrieve(
+                    sub_id,
+                    expand=["latest_invoice", "schedule.phases", "items.data.price"]
+                )
+                status = getattr(sub, "status", None)
+            except Exception:
+                sub = None
+
+        if (not sub) or (status not in ("active", "trialing")):
+            if cust_id:
+                lst = stripe.Subscription.list(customer=cust_id, status="all", limit=20)
+                subs = list(getattr(lst, "data", []) or [])
+                subs.sort(key=lambda s: getattr(s, "created", 0), reverse=True)
+                sub = next((s for s in subs if getattr(s, "status", None) in ("active", "trialing")), None) or (subs[0] if subs else None)
+                status = getattr(sub, "status", None) if sub else None
+
+        if not sub:
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE users
+                       SET is_active = false, updated_at = NOW()
+                     WHERE id = :id
+                """), {"id": uid})
+            return jsonify({"ok": True, "is_active": False, "status": "none"})
+
+        # 2) Intervalo del precio
+        items = getattr(sub, "items", None)
+        data  = getattr(items, "data", None) or []
+        price = getattr(data[0], "price", None) if data else None
+        recurring = getattr(price, "recurring", None)
+        inter = getattr(recurring, "interval", None) or "month"
+        inter_count = getattr(recurring, "interval_count", None) or 1
+
+        # 3) Calcular próxima fecha (varias fuentes)
+        next_ch = _to_dt(getattr(sub, "current_period_end", None))
+
+        # latest_invoice.period_end / lines[0].period.end
+        if not next_ch:
+            li = getattr(sub, "latest_invoice", None)
+            if isinstance(li, str) and li:
+                try:
+                    li = stripe.Invoice.retrieve(li, expand=["lines.data"])
+                except Exception:
+                    li = None
+            if li:
+                next_ch = _to_dt(getattr(li, "period_end", None))
+                if (not next_ch) and getattr(li, "lines", None) and getattr(li.lines, "data", None):
+                    per = getattr(li.lines.data[0], "period", None)
+                    next_ch = _to_dt(getattr(per, "end", None)) if per else None
+
+        # upcoming invoice (más fiable para el "siguiente" cobro)
+        if not next_ch:
+            up = None
+            try:
+                up = stripe.Invoice.upcoming(subscription=getattr(sub, "id", None))
+            except Exception:
+                up = None
+            if not up and cust_id:
+                try:
+                    up = stripe.Invoice.upcoming(customer=cust_id)
+                except Exception:
+                    up = None
+            if up:
+                ts = getattr(up, "next_payment_attempt", None) or getattr(up, "due_date", None) or getattr(up, "period_end", None)
+                next_ch = _to_dt(ts)
+
+        # Fallback total: ancla + intervalo
+        if not next_ch:
+            bca = _to_dt(getattr(sub, "billing_cycle_anchor", None))
+            if bca:
+                # “próximo” ciclo
+                next_ch = add_months_utc(bca, 1 if inter == "month" else (12 if inter == "year" else 0))
+
+        # 4) Normalizar al FUTURO según el intervalo del precio
+        if next_ch:
+            next_ch = advance_to_future(next_ch, inter, inter_count)
+
+        is_active = status in ("active", "trialing")
+        new_sub_id = getattr(sub, "id", None)
+
+        # 5) Persistir
+        with engine.begin() as conn:
+            conn.execute(text("""
+                UPDATE users
+                   SET stripe_subscription_id = COALESCE(:sid, stripe_subscription_id),
+                       is_active            = :act,
+                       plan                 = CASE WHEN :act THEN 'paid' ELSE plan END,
+                       next_charge_at       = :nca,
+                       updated_at           = NOW()
+                 WHERE id = :id
+            """), {"sid": new_sub_id, "act": is_active, "nca": next_ch, "id": uid})
+
+        return jsonify({
+            "ok": True,
+            "is_active": is_active,
+            "status": status,
+            "next_charge_at": next_ch.isoformat() if next_ch else None,
+            "used_subscription_id": new_sub_id
+        })
+    except Exception as e:
+        print("[billing_sync] error:", repr(e))
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+@app.get("/_debug_billing_calc")
+@login_required
+def _debug_billing_calc():
+    # Llama internamente a billing_sync pero sin UPDATE (o copia la lógica sin el UPDATE)
+    # Para no alargar, puedes llamar fetch('/billing_sync') desde la consola y ver el "source".
+    return jsonify({"ok": False, "msg": "Usa /billing_sync y mira el campo 'source' en la respuesta"})
+
+
+# === DEBUG: ver lo que devuelve Stripe (solo en local; quítalo en prod)
+@app.get("/_debug_subscription")
+@login_required
+def _debug_subscription():
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT stripe_subscription_id, stripe_customer_id
+            FROM users WHERE id=:id
+        """), {"id": session["user_id"]}).mappings().first()
+
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    sub = None
+    sub_id = row.get("stripe_subscription_id")
+    cust_id = row.get("stripe_customer_id")
+
+    try:
+        if sub_id:
+            sub = stripe.Subscription.retrieve(
+                sub_id,
+                expand=["latest_invoice", "schedule.phases", "items.data.price"]
+            )
+        elif cust_id:
+            lst = stripe.Subscription.list(customer=cust_id, status="all", limit=10)
+            subs = _g(lst, "data", []) or []
+            subs.sort(key=lambda s: _g(s, "created", 0) or 0, reverse=True)
+            sub = next((s for s in subs if _g(s, "status") in ("active", "trialing")), None) or (subs[0] if subs else None)
+
+        if not sub:
+            return jsonify({"ok": False, "error": "no subscription found"}), 404
+
+        items = _g(sub, "items")
+        data_list = _g(items, "data") if items is not None else None
+        item = (data_list[0] if data_list else None)
+        price = _g(item, "price")
+        recurring = _g(price, "recurring")
+
+        out = {
+            "id": _g(sub, "id"),
+            "status": _g(sub, "status"),
+            "current_period_start": _to_iso(_g(sub, "current_period_start")),
+            "current_period_end": _to_iso(_g(sub, "current_period_end")),
+            "billing_cycle_anchor": _to_iso(_g(sub, "billing_cycle_anchor")),
+            "trial_end": _to_iso(_g(sub, "trial_end")),
+            "collection_method": _g(sub, "collection_method"),
+            "price_id": _g(price, "id") if price else None,
+            "interval": _g(recurring, "interval") if recurring else None,
+            "interval_count": _g(recurring, "interval_count") if recurring else None,
+            "latest_invoice_status": _g(_g(sub, "latest_invoice"), "status"),
+            "schedule_has_phases": bool(_g(_g(sub, "schedule"), "phases")),
+        }
+        return jsonify({"ok": True, "subscription": out})
+    except Exception as e:
+        print("[_debug_subscription] error:", repr(e))
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+# === Portal de facturación (gestionar método de pago, recibos, cancelar)
+@app.post("/billing_portal")
+@login_required
+def billing_portal():
+    try:
+        u = current_user()
+        with engine.begin() as conn:
+            cust_id = conn.execute(text("""
+              SELECT stripe_customer_id FROM users WHERE id=:id
+            """), {"id": u["id"]}).scalar()
+
+        if not cust_id:
+            return jsonify({"ok": False, "error": "No hay stripe_customer_id guardado para tu usuario."}), 400
+
+        portal = stripe.billing_portal.Session.create(
+            customer=cust_id,
+            return_url=PUBLIC_BASE_URL
+        )
+        return jsonify({"ok": True, "url": portal.url})
+    except Exception as e:
+        # opcional: imprime el stack en consola del servidor para depurar
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "error": str(e)}), 400
+    
 # ---------------------------
 # Run
 # ---------------------------

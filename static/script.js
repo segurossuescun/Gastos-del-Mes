@@ -1,3 +1,28 @@
+// --- Gate de sesión (global)
+window.__sessionOK = window.__sessionOK ?? false;
+
+window.RUTAS_PRIVADAS = new Set([
+  '/cargar_configuracion','/guardar_configuracion','/restablecer_configuracion',
+  '/cargar_perfil','/guardar_perfil',
+  '/cargar_ingresos','/guardar_ingreso','/eliminar_ingreso',
+  '/cargar_bills','/guardar_bill','/eliminar_bill',
+  '/cargar_egresos','/guardar_egreso','/eliminar_egreso',
+  '/cargar_pagos','/guardar_pago','/eliminar_pago'
+]);
+
+function _marcarSesion(on) {
+  window.__sessionOK = !!on;
+  try { document.body.classList.toggle('is-auth', !!on); } catch {}
+}
+
+// === FLAGS GLOBALES (poner aquí, antes de fetchJSON/boot) ===
+window.__paywall = window.__paywall ?? false;         // si 402/403, true
+window.__waitingStripeVerify = window.__waitingStripeVerify 
+  ?? (new URLSearchParams(location.search).get('checkout') === 'success'); // pausa tras Stripe
+window.__modalGate   = window.__modalGate   ?? false;  // evita dobles modales
+window.__privadaInit = window.__privadaInit ?? false;  // evita duplicar cargas privadas
+window.__stripeHandled = window.__stripeHandled ?? false; // anti-doble verificación
+let __paywallShown = false; // mensaje de paywall solo 1 vez
 // =============================
 // CONFIGURACIÓN POR DEFECTO
 // =============================
@@ -254,7 +279,6 @@ replaceArray(configMediosPago,        cfg.medios_pago        || []);
 
 // ✅ refresca UI
 if (typeof actualizarSelectsVistas === 'function') actualizarSelectsVistas();
-
 }
 
 // --- Auth helpers ---
@@ -540,24 +564,6 @@ function limpiarBillsConPersonasInvalidas(bills, personas) {
   }));
 }
 
-// --- Gate de sesión (global)
-window.__sessionOK = false;
-
-window.RUTAS_PRIVADAS = new Set([
-  '/cargar_configuracion','/guardar_configuracion','/restablecer_configuracion',
-  '/cargar_perfil','/guardar_perfil',
-  '/cargar_ingresos','/guardar_ingreso','/eliminar_ingreso',
-  '/cargar_bills','/guardar_bill','/eliminar_bill',
-  '/cargar_egresos','/guardar_egreso','/eliminar_egreso',
-  '/cargar_pagos','/guardar_pago','/eliminar_pago'
-]);
-
-function _marcarSesion(on) {
-  window.__sessionOK = !!on;
-  try { document.body.classList.toggle('is-auth', !!on); } catch {}
-}
-
-
 // ---- Helpers de toast (reusar en ingresos/bills/egresos/pagos) ----
 function toastOk(title){
   if (W.Swal) {
@@ -675,6 +681,34 @@ function aplicarConfiguracionSegura(cfg, who = 'unknown') {
   } catch (err) {
     console.error('aplicarConfiguracionSegura error:', err);
   }
+}
+async function syncNextChargeIfMissing() {
+  const r = await fetch('/billing_sync', { method:'POST', credentials:'same-origin' });
+  return r.json();
+}
+
+// corre una sola vez (a menos que uses {force:true})
+window.__privadaInit = window.__privadaInit ?? false;
+
+async function mostrarAppYcargar({ force = false } = {}) {
+  if (window.__privadaInit && !force) return;
+  window.__privadaInit = true;
+
+  // mostrar zona privada
+  document.getElementById('seccion-login')?.classList.add('oculto');
+  const zp = document.getElementById('zona-privada');
+  if (zp && zp.style) zp.style.display = 'block';
+
+  // solo carga datos si NO estás esperando verificación Stripe ni hay paywall
+  if (!window.__waitingStripeVerify && !window.__paywall) {
+    try { await iniciarZonaPrivada?.(); } catch {}
+  }
+
+  // refrescos suaves (no rompen si ya estás suscrito)
+  try { await checkAccountStatus?.(); } catch {}
+  try { await refrescarEstadoCuenta?.(); } catch {}
+
+  enforceAuthView?.();
 }
 
 // =============================
@@ -849,18 +883,17 @@ function mostrarPantallaLogin({ reason = "" } = {}) {
 window.mostrarPantallaLogin = window.mostrarPantallaLogin || mostrarPantallaLogin;
 
 // =============================
-// FETCH JSON (gate de sesión + 401 amigable)
+// FETCH JSON (gate sesión + paywall 402/403)
 // =============================
 async function fetchJSON(url, opts = {}, { silent401 = false } = {}) {
-  // Normaliza por si te pasan null
   opts = opts || {};
+  const path = new URL(url, location.origin).pathname;
 
-  // Gate: NO llamar rutas privadas si aún no hay sesión OK
+  // ✋ No llames rutas privadas si NO hay sesión o estás en paywall
   try {
-    const rutasPriv = window.RUTAS_PRIVADAS || new Set();     // tolera que aún no esté seteado
-    const path      = new URL(url, location.origin).pathname; // soporta rutas relativas
-    if (!window.__sessionOK && rutasPriv.has(path)) {
-      console.info('⛔️ Bloqueado antes de sesión:', path);
+    const rutasPriv = window.RUTAS_PRIVADAS || new Set();
+    if ((!window.__sessionOK || window.__paywall) && rutasPriv.has(path)) {
+      console.info('⛔️ Bloqueado por sesión/paywall:', path);
       return null;
     }
   } catch {}
@@ -870,20 +903,48 @@ async function fetchJSON(url, opts = {}, { silent401 = false } = {}) {
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     ...opts,
+    // opcional si usas abort en logout:
+    // signal: window.__netAbort?.signal
   });
 
-  // 401 → si es silencioso devolvemos null; si no, mostramos login y lanzamos
+  // 401 → manda a login
   if (res.status === 401) {
-    if (silent401) return null;
-    try { mostrarPantallaLogin?.(); } catch {}
-    if (typeof _marcarSesion === 'function') _marcarSesion(false);
-    else window.__sessionOK = false;
-    throw new Error('HTTP 401');
+    if (!silent401) {
+      try { mostrarPantallaLogin?.(); } catch {}
+      if (typeof _marcarSesion === 'function') _marcarSesion(false);
+      else window.__sessionOK = false;
+    }
+    return null;
   }
 
-  if (!res.ok) throw new Error(`Fallo en ${url} (HTTP ${res.status})`);
+  // 402/403 → activa paywall **una sola vez**
+  if (res.status === 402 || res.status === 403) {
+    window.__paywall = true;
+    // si estamos volviendo de Stripe, no dispares nada ahora
+    if (window.__waitingStripeVerify) return null;
 
-  const ctype = res.headers.get('content-type') || '';
+    if (!__paywallShown) {
+      __paywallShown = true;
+      try {
+        setTimeout(() => onBellClick?.(), 0); // abre campanita
+        Swal.fire({
+          icon: 'info',
+          title: 'Suscripción requerida',
+          html: 'Pulsa la campanita <b>🔔</b> para activar tu suscripción.',
+          customClass: { popup: 'gastos', confirmButton: 'btn-gastos' },
+          buttonsStyling: false
+        });
+      } catch {}
+    }
+    return null;
+  }
+
+  if (!res.ok) {
+    console.warn('fetchJSON fallo', url, res.status);
+    return null;
+  }
+
+  const ctype = (res.headers.get('content-type') || '').toLowerCase();
   return ctype.includes('application/json') ? res.json() : res.text();
 }
 
@@ -904,7 +965,8 @@ function normalizarEmailLogin(valor) {
   return "";
 }
 
-// Lógica de login con mensajes de trial/paid
+// Lógica de login con mensajes de trial/paid (corregida)
+// ⛳ pega esta versión (clave: early-return cuando needs_subscription)
 async function doLogin(email, password) {
   try {
     const res = await fetch('/login', {
@@ -912,114 +974,125 @@ async function doLogin(email, password) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-
-    const text = await res.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch {}
-
+    const text = await res.text(); let data = {}; try { data = JSON.parse(text); } catch {}
     if (!res.ok) {
-      if (res.status === 402) {
-        await Swal.fire({
-          icon: 'error',
-          title: '⛔ Tu prueba terminó',
-          text: 'Para seguir usando la app, activa tu suscripción.',
-          confirmButtonText: 'Entendido'
-        });
-        return;
-      }
       const msg = data?.error || `Error ${res.status}`;
-      Swal.fire({ icon: 'error', title: 'No pudimos iniciar sesión', text: msg });
+      Swal.fire({ icon:'error', title:'No pudimos iniciar sesión', text: msg });
       return;
     }
 
-    // ✅ Login OK → marca sesión y guarda usuario
-      if (typeof _marcarSesion === 'function') _marcarSesion(true);
-      else window.__sessionOK = true;
+    // sesión ok
+    if (typeof _marcarSesion === 'function') _marcarSesion(true); else window.__sessionOK = true;
+    const usuario = { id:data.id, email:data.email, nombre:data.nombre || data.email };
+    try { sessionStorage.setItem('usuario', JSON.stringify(usuario)); } catch {}
 
-      try {
-        sessionStorage.setItem('usuario', JSON.stringify({
-          id: data.id,
-          email: data.email,
-          nombre: data.nombre || data.email
-        }));
-      } catch {}
-
-    // Login OK: mostrar mensajes según plan/días
-    if (data.plan === 'trial') {
-      const days = data.days_left;
-      if (typeof days === 'number') {
-        if (days <= 3) {
-          await Swal.fire({
-            icon: 'warning',
-            title: '⚠️ Tu prueba está por terminar',
-            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de acceso gratuito.`,
-            confirmButtonText: 'Vale'
-          });
-        } else {
-          await Swal.fire({
-            icon: 'info',
-            title: '🎉 Prueba gratuita activa',
-            text: `Te quedan ${days} día${days !== 1 ? 's' : ''} de prueba. ¡Recuerda suscribirte para no perder acceso!`,
-            confirmButtonText: 'Entendido'
-          });
-        }
-      }
-    } else if (data.plan === 'paid') {
-      await Swal.fire({
-        icon: 'success',
-        title: '¡Gracias por suscribirte! 💜',
-        text: 'Tu acceso está activo más allá de la prueba.',
-        confirmButtonText: 'Continuar'
-      });
+    // 🔔 siempre deja lista la campanita
+    const bell = document.getElementById('btn-suscribirme');
+    if (bell) {
+      bell.style.display = 'inline-flex';
+      bell.replaceWith(bell.cloneNode(true));
+      document.getElementById('btn-suscribirme').addEventListener('click', onBellClick, { passive:true });
     }
 
-    // Cierra login y arranca zona privada (ajusta a tu flujo si ya tienes helpers)
-    document.getElementById('seccion-login')?.classList.add('oculto');
-    document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+    // 🚧 PAYWALL: NO mostrar zona privada ni iniciar datos si falta suscripción
+    if (data.needs_subscription) {
+      window.__paywall = true;
+      await Swal.fire({
+        icon:'info',
+        title:'Suscripción requerida',
+        text:'Tu prueba terminó o tu suscripción está inactiva. Actívala para continuar.',
+        showCancelButton:true,
+        confirmButtonText:'Suscribirme',
+        cancelButtonText:'Luego'
+      }).then(r => { if (r.isConfirmed) onBellClick(); });
 
-    // Si tienes funciones de carga, úsalas:
-    try { await iniciarZonaPrivada?.(); } catch {}
-  
+      // UI básica sin pedir datos (evita la lluvia de 403)
+      document.getElementById('seccion-login')?.classList.add('oculto');
+      document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display='block');
+      mostrarPaywallSuscripcion();
+      return; // 👈 CLAVE
+    }
+
+    // Mensajitos normales…
+    if (data.plan === 'trial' && typeof data.days_left === 'number') {
+      const d = data.days_left;
+      await Swal.fire({
+        icon: d<=3 ? 'warning' : 'info',
+        title: d<=3 ? '⚠️ Tu prueba está por terminar' : '🎉 Prueba gratuita activa',
+        text: `Te quedan ${d} día${d!==1?'s':''}.`
+      });
+    } else if (data.plan === 'paid' && data.is_active) {
+      await Swal.fire({ icon:'success', title:'¡Gracias por suscribirte! 💜', text:'Acceso activo.' });
+    }
+
+    // ✅ Ahora sí: mostrar app y cargar datos
+    await mostrarAppYcargar();
+
   } catch (err) {
     console.error('Login error:', err);
-    Swal.fire({ icon: 'error', title: 'Ups', text: 'Error inesperado iniciando sesión.' });
+    Swal.fire({ icon:'error', title:'Ups', text:'Error inesperado iniciando sesión.' });
   }
 }
 
-// Aviso de días restantes al entrar (si ya logueado)
-async function checkAccountStatus() {
-  try {
-    const res = await fetch("/account_status");
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data.ok) return;
-
-    const days = data.days_left;
-    if (days === null) return;        // paid → nada
-    if (days < 0) {
-      await Swal.fire({
-        icon: "error",
-        title: "⛔ Tu prueba terminó",
-        text: "Necesitas suscribirte para seguir usando la app.",
-        confirmButtonText: "Entendido"
-      });
-      return;
-    }
-    if (days <= 3) {
-      await Swal.fire({
-        icon: "warning",
-        title: "⚠️ Tu prueba está por terminar",
-        text: `Te quedan ${days} día${days !== 1 ? "s" : ""} de acceso gratuito.`,
-        confirmButtonText: "Vale"
-      });
-    }
-  } catch (err) {
-    console.error("Error verificando estado de cuenta:", err);
-  }
+// UI paywall suavecita
+function mostrarPaywallSuscripcion() {
+  Swal.fire({
+    icon:'info',
+    title:'Suscripción pendiente',
+    html:'Pulsa la campanita <b>🔔</b> para activar tu suscripción y habilitar tus datos.',
+    confirmButtonText:'Entendido'
+  });
+  // si quieres ocultar secciones que requieren datos:
+  document.querySelectorAll('[data-requiere-suscripcion]').forEach(el => el.classList.add('oculto'));
 }
+
+(function handleCheckoutReturn(){
+  const url = new URL(location.href);
+  const chk = url.searchParams.get('checkout');
+  const sid = url.searchParams.get('session_id');
+  if (chk !== 'success' || !sid) return;
+
+  window.__waitingStripeVerify = true;  // pausa modales/paywall
+
+  const clean = () => {
+    url.searchParams.delete('checkout');
+    url.searchParams.delete('session_id');
+    history.replaceState({}, '', url.pathname + (url.search ? '?' + url.search : '') + url.hash);
+    window.__waitingStripeVerify = false;
+    window.__paywall = false;
+    __paywallShown = false;
+  };
+
+  (async () => {
+    try {
+      await fetch(`/checkout_verify?session_id=${encodeURIComponent(sid)}`, {credentials:'same-origin'});
+      // por si Stripe cierra ciclo unos segundos después
+      await fetch('/billing_sync', { method:'POST', credentials:'same-origin' });
+
+      const st = await fetch('/billing_status', {credentials:'same-origin'}).then(r=>r.json()).catch(()=>null);
+
+      // si ya está activo, mostramos *solo* éxito y NO paywall
+      if (st?.plan === 'paid' && st?.is_active) {
+        if (!window.__modalGate) {
+          window.__modalGate = true;
+          await Swal.fire({
+            icon:'success',
+            title:'¡Suscripción activada! 💜',
+            text:'Tu acceso completo ya está disponible.',
+            customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+            buttonsStyling:false
+          });
+          window.__modalGate = false;
+        }
+        window.__paywallShown = true;  // evita que otro trozo lo muestre
+      }
+    } finally {
+      clean();
+    }
+  })();
+})();
 
 // === Listeners de formularios ===
-
 // LOGIN
 (function wireLoginForm(){
   const form = document.getElementById('form-login');
@@ -1090,9 +1163,7 @@ async function checkAccountStatus() {
       } catch {}
 
       // Tras autologin del back:
-      document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
-      try { await iniciarZonaPrivada?.(); } catch {}
-      try { await checkAccountStatus?.(); } catch {}
+      await mostrarAppYcargar();
 
       // Cierra/oculta secciones de registro/login y muestra la app
       document.getElementById('seccion-login')?.classList.add('oculto');
@@ -2694,32 +2765,43 @@ if (sessionStorage.getItem("usuario")) {
 
 // ✅ 3) cargarPerfilEnUI: además de pintar, cachea en sessionStorage
 async function cargarPerfilEnUI() {
+  // ⏸️ No cargar si hay paywall o estamos verificando Stripe
+  if (window.__paywall || window.__waitingStripeVerify) return;
+
+  // 🚫 Si no hay sesión real, no dispares
+  if (!window.__sessionOK && !(typeof haySesion === 'function' && haySesion())) return;
+
   try {
-    const resp = await fetch('/cargar_perfil');
-    if (!resp.ok) throw new Error("No se pudo obtener perfil");
-    const perfil = await resp.json();
-
-    // cachear
-    sessionStorage.setItem("perfil", JSON.stringify(perfil));
-
-    // Barra y popover
-    const barra = document.getElementById("nombre-usuario-barra");
-    if (barra) {
-      barra.textContent = perfil.apodo || "";
-    }
-    if (typeof updateTelefonoPopover === "function") {
-      updateTelefonoPopover(perfil.telefono || "");
+    // Usa fetchJSON con 401 silencioso
+    const perfil = await fetchJSON('/cargar_perfil', { method: 'GET' }, { silent401: true });
+    if (!perfil) {
+      // si vino null por 401/paywall, no molestamos al usuario otra vez
+      return;
     }
 
-    // Inputs del modal
+    // 🗄️ Cachear
+    try { sessionStorage.setItem('perfil', JSON.stringify(perfil)); } catch {}
+
+    // 🧑‍💼 Barra y popover
+    const barra = document.getElementById('nombre-usuario-barra');
+    if (barra) barra.textContent = perfil.apodo || '';
+
+    if (typeof updateTelefonoPopover === 'function') {
+      updateTelefonoPopover(perfil.telefono || '');
+    }
+
+    // 📝 Inputs del modal
     const inpApodo = document.getElementById('perfil-apodo');
     if (inpApodo) inpApodo.value = perfil.apodo || '';
-    const inpTelef  = document.getElementById('perfil-telefono');
-    if (inpTelef)  inpTelef.value  = perfil.telefono || '';
 
-    // también refresca configTemporal.telefono_dueno
+    const inpTelef = document.getElementById('perfil-telefono');
+    if (inpTelef)  inpTelef.value = perfil.telefono || '';
+
+    // 🔧 Refresca config temporal
+    window.W = window.W || {};
     W.configTemporal = W.configTemporal || {};
-    W.configTemporal.telefono_dueno = perfil.telefono || "";
+    W.configTemporal.telefono_dueno = perfil.telefono || '';
+
   } catch (e) {
     console.warn('No se pudo cargar perfil:', e);
   }
@@ -2859,56 +2941,50 @@ function limpiarLoginUI() {
   setTimeout(() => { u?.focus(); }, 0);
 }
 
-  // 🔒 Cerrar sesión
-async function cerrarSesion(e) {
+ // Helper: mostrar SOLO la pantalla de login (sin parpadeos)
+function mostrarSoloLogin() {
+  // Oculta todo lo “privado”
+  ['zona-privada','barra-superior','menu-vistas','seccion-usuario','usuario']
+    .forEach(id => document.getElementById(id)?.classList.add('oculto'));
+
+  // Muestra solo el login (registro se queda oculto)
+  document.getElementById('seccion-login')?.classList.remove('oculto');
+  document.getElementById('seccion-registro')?.classList.add('oculto');
+}
+
+// 🔒 Cerrar sesión (versión anti-parpadeo)
+// una sola vez arriba del archivo:
+window.__netAbort = new AbortController(); // para cancelar fetches pendientes
+
+function mostrarSoloLogin() {
+  document.body.classList.add('state-logout');
+  // oculta todo lo privado
+  ['zona-privada','barra-superior','menu-vistas','seccion-usuario','usuario']
+    .forEach(id => document.getElementById(id)?.classList.add('oculto'));
+  // muestra solo login
+  document.getElementById('seccion-login')?.classList.remove('oculto');
+  document.getElementById('seccion-registro')?.classList.add('oculto');
+}
+
+// 🔒 Cerrar sesión (sin parpadeo)
+async function cerrarSesion(e){
   e?.preventDefault?.();
 
-  // 1) Intenta cerrar sesión en el backend (si no existe /logout, se ignora el error)
   try {
-    await fetch('/logout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err) {
-    console.warn('[logout] fallo (ignorable en local):', err);
-  }
+    await fetch('/logout', { method:'POST', credentials:'include' });
+  } catch {}
 
-  // 2) Apaga sesión en el front
+  // limpia flags locales
   try { sessionStorage.removeItem('usuario'); } catch {}
-  if (typeof _marcarSesion === 'function') _marcarSesion(false);
-  window.__sessionOK   = false;
-  window.__privadaInit = false;              // evita re-bootstrap automático
-  (document.activeElement || {}).blur?.();
-  document.body.classList.remove('auth','is-auth');
+  window.__sessionOK = false;
+  window.__paywall   = false;
+  window.__waitingStripeVerify = false;
 
-  // 3) Feedback y mostrar login sin recargar
-  if (window.Swal) {
-    await Swal.fire({
-      title: '¡Hasta luego!',
-      text: 'Tu sesión ha sido cerrada.',
-      icon: 'info',
-      timer: 1200,
-      showConfirmButton: false
-    });
-  }
-  
-  try { limpiarLoginUI(); } catch {}
-  
-  // 4) Volver a la pantalla de login (usa tu helper si existe)
-  if (typeof window.mostrarPantallaLogin === 'function') {
-    window.mostrarPantallaLogin();
-  } else {
-    document.getElementById('zona-privada')?.setAttribute('style','display:none;');
-    document.getElementById('barra-superior')?.setAttribute('style','display:none;');
-    document.getElementById('menu-vistas')?.setAttribute('style','display:none;');
-    document.getElementById('usuario')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-usuario')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-login')?.setAttribute('style','display:block;');
-    document.getElementById('seccion-registro')?.setAttribute('style','display:block;');
-  }
+  // recarga “como primera vez”
+  location.replace(location.pathname); // sin queries ni hash
 }
-window.cerrarSesion = cerrarSesion; // deja la exportación global como ya la tienes
+
+window.cerrarSesion = cerrarSesion;
 
 // ✅ Registro (real, sin simulación)
 formRegistro.addEventListener("submit", async (e) => {
@@ -4415,6 +4491,12 @@ function clavePago(p) {
   return `${p.bill}|${p.persona}|${p.fecha}|${p.medio||''}|${p.submedio||''}|${p.monto}|${p.nota||''}`;
 }
 
+// ✅ ÚNICA versión de cargarPagos (drop-in)
+// Carga inicial de pagos
+function clavePago(p) {
+  return `${p.bill}|${p.persona}|${p.fecha}|${p.medio||''}|${p.submedio||''}|${p.monto}|${p.nota||''}`;
+}
+
 async function cargarPagos() {
   try {
     const data  = await fetchJSON('/cargar_pagos', { method: 'GET' }, { silent401: true });
@@ -4754,6 +4836,131 @@ function eliminarPago(i) {
   });
 }
 
+// -----------------------------------
+// Resumen Pagos (sin globals sueltas)
+// -----------------------------------
+function actualizarResumenPagos(filtrados) {
+  const { filtroMes, filtroPer } = $pagosEls();
+  const mesFiltro = filtroMes?.value || "";
+  const personaFiltro = (filtroPer?.value || "").toLowerCase();
+
+  const totalPagos = filtrados.reduce((acc, p) => acc + parseFloat(p.monto || 0), 0);
+  const resumenPorPersona = {};
+  filtrados.forEach(p => {
+    resumenPorPersona[p.persona] = (resumenPorPersona[p.persona] || 0) + parseFloat(p.monto || 0);
+  });
+  const detalle = Object.entries(resumenPorPersona)
+    .map(([nombre, monto]) => `${nombre}: $${monto.toFixed(2)}`)
+    .join(" | ");
+
+  const nombreMesFiltro = nombreDelMes(mesFiltro);
+  let tituloPrincipal = `💳 Total de pagos en ${nombreMesFiltro}: $${totalPagos.toFixed(2)}`;
+  if (personaFiltro) {
+    tituloPrincipal = `💳 Total de pagos de "${filtroPer?.value}" en ${nombreMesFiltro}: $${totalPagos.toFixed(2)}`;
+  }
+
+  const panel = document.getElementById("resumen-pagos");
+  if (!panel) return;
+  panel.innerHTML = `${tituloPrincipal}<br>👥 ${detalle || "—"}`;
+}
+
+// Grafico Pagos
+function actualizarGraficoPagos(filtrados) {
+  const resumen = {};
+  filtrados.forEach(p => {
+    resumen[p.persona] = (resumen[p.persona] || 0) + Number(p.monto || 0);
+  });
+
+  const labels = Object.keys(resumen);
+  const data   = Object.values(resumen);
+
+  if (graficoPagos) graficoPagos.destroy();
+  if (!ctxGraficoPagos) return; // por si no existe el canvas
+
+  graficoPagos = new Chart(ctxGraficoPagos, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Pagos por persona',
+        data
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+
+function editarPago(i) {
+  const p = pagos[i];
+  if (!p) return;
+
+  const { bill, monto, persona, medio, fecha, nota, subCont, subSelect } = $pagosEls();
+  if (!bill || !monto || !persona || !medio || !fecha || !nota) return;
+
+  bill.value      = p.bill || "";
+  monto.value     = Number(p.monto || 0);
+  persona.value   = p.persona || "";
+  fecha.value     = p.fecha || "";
+  nota.value      = p.nota || "";
+
+  const montoNum = Number(p.monto || 0);
+  if (montoNum <= 0) {
+    medio.value    = "";
+    medio.disabled = true;
+    medio.title    = "Monto = 0 → No pagó";
+    if (subCont) subCont.style.display = "none";
+    if (subSelect) subSelect.value = "";
+  } else {
+    medio.disabled = false;
+    medio.title    = "";
+    medio.value    = p.medio || "";
+    medio.dispatchEvent(new Event("change")); // repobla submedios
+    if (subSelect) subSelect.value = p.submedio || "";
+  }
+
+  const { form } = $pagosEls();
+  if (form) {
+    form.dataset.editIndex = i;
+    const btn = form.querySelector("button[type='submit']");
+    if (btn) btn.textContent = "Actualizar Pago";
+  }
+}
+
+function eliminarPago(i) {
+  if (!confirm("¿Eliminar este pago? 😱")) return;
+
+  const eliminado = pagos[i];
+  if (!eliminado) return;
+
+  // Optimista
+  const backup = pagos.splice(i, 1)[0];
+  mostrarPagos();
+
+  fetch('/eliminar_pago', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(eliminado)
+  })
+
+  .then(async (res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    try { await res.json(); } catch {}
+    toastOk("🗑️ Pago eliminado");
+  })
+  .catch(err => {
+    console.error("Error al eliminar pago:", err);
+    toastErr("❌ No se pudo eliminar el pago");
+    // rollback
+    pagos.splice(i, 0, backup);
+    mostrarPagos();
+  });
+}
+
 // =============================
 // DISPONIBLE (pintado central)
 // =============================
@@ -4865,89 +5072,144 @@ function aplanarListas() {
   });
 }
 
+// ✅ ÚNICA versión de cargarIngresos (drop-in)
 async function cargarIngresos() {
+  // ⏸️ No cargar si estás en paywall o volviendo de Stripe
+  if (window.__paywall || window.__waitingStripeVerify) return;
+
+  // 🚫 No dispares si no hay sesión real
+  if (!window.__sessionOK && !(typeof haySesion === 'function' && haySesion())) {
+    window.W = window.W || {};
+    if (!Array.isArray(window.W.ingresos)) window.W.ingresos = [];
+    window.ingresos = window.W.ingresos;  // compat
+    mostrarIngresos?.(true);
+    return;
+  }
+
   try {
     const data = await fetchJSON('/cargar_ingresos', { method: 'GET' }, { silent401: true });
-    if (!data) { // 401 → sin sesión
-      if (Array.isArray(window.ingresos)) ingresos.length = 0;
+    if (!data) {
+      // 401 silencioso o paywall → no seguimos
+      window.W = window.W || {};
+      window.W.ingresos = [];
+      window.ingresos = window.W.ingresos; // compat
+      mostrarPantallaLogin?.();
       mostrarIngresos?.(true);
       return;
     }
 
-    const nuevos = Array.isArray(data) ? data : (data?.ingresos || []);
+    // 💾 Tolerante al shape
+    const nuevos = Array.isArray(data?.ingresos) ? data.ingresos
+                 : Array.isArray(data?.data)     ? data.data
+                 : Array.isArray(data)           ? data
+                 : [];
+
+    // 🧠 De-dupe por llave estable
+    const key = i => `${i.fecha ?? ''}|${i.monto ?? ''}|${i.fuente ?? ''}|${(i.nota ?? '').trim()}`;
+
     window.W = window.W || {};
-    W.ingresos = Array.isArray(W.ingresos) ? W.ingresos : [];
+    const prev = Array.isArray(window.W.ingresos) ? window.W.ingresos : [];
+    const mapa = new Map(prev.map(i => [key(i), i])); // lo existente primero
+    for (const i of nuevos) mapa.set(key(i), i);      // server pisa duplicados
 
-    const clave = i => `${i.fecha}|${i.monto}|${i.fuente}|${i.nota||''}`;
-    const mapa = new Map(W.ingresos.map(i => [clave(i), i]));
-    (nuevos || []).forEach(i => mapa.set(clave(i), i));
-    W.ingresos = Array.from(mapa.values());
+    window.W.ingresos = Array.from(mapa.values());
+
+    // 🗓️ Orden opcional por fecha desc
+    window.W.ingresos.sort((a, b) => (new Date(b.fecha || 0)) - (new Date(a.fecha || 0)));
+
+    // 🔁 Compat con código viejo
+    window.ingresos = window.W.ingresos;
 
     mostrarIngresos?.(true);
-  } catch (err) {
-    console.error('Error al cargar ingresos:', err);
-    if (Array.isArray(window.ingresos)) ingresos.length = 0;
-    mostrarIngresos?.(true);
-  }
-}
 
-async function cargarEgresos() {
-  try {
-    await new Promise((resolve, reject) => {
-      try {
-        cargarYNormalizarEgresos(() => {
-          try {
-            if (typeof window.mostrarEgresos === 'function') window.mostrarEgresos();
-          } finally {
-            resolve();
-          }
-        });
-      } catch (e) {
-        reject(e);
-      }
-    });
   } catch (err) {
-    if (String(err?.message || '').includes('401')) {
-      if (typeof window.mostrarPantallaLogin === 'function') window.mostrarPantallaLogin();
-      if (Array.isArray(window.egresos)) window.egresos.length = 0;
-      if (typeof window.mostrarEgresos === 'function') window.mostrarEgresos();
-      return;
-    }
-    console.error('Error al cargar egresos:', err);
-  }
-}
-
-async function cargarEgresos() {
-  try {
-    await new Promise((resolve, reject) => {
-      try {
-        cargarYNormalizarEgresos(() => {
-          try { mostrarEgresos?.(); } finally { resolve(); }
-        });
-      } catch (e) {
-        reject(e);
-      }
-    });
-  } catch (err) {
-    if (String(err?.message || '').includes('401')) {
+    // Manejo suave de 401
+    if (String(err?.message || '').includes('401') || err?.status === 401) {
       mostrarPantallaLogin?.();
-      if (Array.isArray(window.egresos)) egresos.length = 0;
-      mostrarEgresos?.();
+      window.W = window.W || {};
+      window.W.ingresos = [];
+      window.ingresos = window.W.ingresos; // compat
+      mostrarIngresos?.(true);
+      return;
+    }
+    console.error('Error al cargar ingresos:', err);
+    window.W = window.W || {};
+    window.W.ingresos = [];
+    window.ingresos = window.W.ingresos;   // compat
+    mostrarIngresos?.(true);
+  }
+}
+
+// 🔹 ÚNICA versión de cargarEgresos (drop-in)
+async function cargarEgresos() {
+  // ⏸️ No intentes cargar si estás en paywall o volviendo de Stripe
+  if (window.__paywall || window.__waitingStripeVerify) return;
+
+  try {
+    // Si tienes la función de normalización por callback, la "promisificamos"
+    if (typeof window.cargarYNormalizarEgresos === 'function') {
+      await new Promise((resolve, reject) => {
+        try {
+          window.cargarYNormalizarEgresos(() => {
+            try {
+              // Asegura el array para evitar TypeError si no hay datos
+              if (!Array.isArray(window.egresos)) window.egresos = [];
+              window.mostrarEgresos?.();
+            } finally {
+              resolve();
+            }
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+    } else {
+      // Fallback por si no existe la función anterior: pide directo al backend
+      const data = await fetchJSON('/cargar_egresos', { method:'GET' }, { silent401:true });
+      if (!data) return; // puede ser paywall/401 → simplemente salimos
+
+      // Tolerante al shape del payload
+      const lista = Array.isArray(data.egresos) ? data.egresos
+                  : Array.isArray(data.items)   ? data.items
+                  : Array.isArray(data.data)    ? data.data
+                  : Array.isArray(data)         ? data
+                  : [];
+
+      window.egresos = lista;
+      window.mostrarEgresos?.();
+    }
+
+  } catch (err) {
+    // Manejo suave de 401
+    if (String(err?.message || '').includes('401') || err?.status === 401) {
+      window.mostrarPantallaLogin?.();
+      if (!Array.isArray(window.egresos)) window.egresos = [];
+      window.mostrarEgresos?.();
       return;
     }
     console.error('Error al cargar egresos:', err);
   }
 }
 
+// ✅ Reemplaza tu cargarConfiguracion por esta
 async function cargarConfiguracion() {
+  // ⏸️ No cargar si hay paywall o estamos verificando Stripe
+  if (window.__paywall || window.__waitingStripeVerify) return;
+
+  // 🚫 Si no hay sesión real, no dispares
+  if (!window.__sessionOK && !(typeof haySesion === 'function' && haySesion())) return;
+
   try {
+    // 401 silencioso → devuelve null; no rompemos UI
     const cfg = await fetchJSON('/cargar_configuracion', { method: 'GET' }, { silent401: true });
     if (!cfg) return;
+
     aplicarConfiguracionSegura(cfg, 'cargarConfiguracion');
   } catch (e) {
     console.error('Error al cargar configuración:', e);
   }
 }
+
 // =============
 // === Boot ===
 // =============
@@ -4979,7 +5241,13 @@ function startSplashAnim() {
 document.addEventListener('DOMContentLoaded', startSplashAnim, { once:true });
 window.addEventListener('load', startSplashAnim, { once:true });
 
-async function iniciarZonaPrivada() {
+    // 🚧 Si hay paywall, no pidamos datos (evita 403 y modales que se cierran)
+  async function iniciarZonaPrivada() {
+  if (window.__paywall || window.__waitingStripeVerify) {
+    console.info('PAYWALL/STRIPE: no cargo datos aún');
+    return;
+  }
+
   // 1) Config primero (muchas vistas dependen de ella)
   if (typeof cargarConfiguracion === 'function') {
     try { await cargarConfiguracion(); } catch (e) { console.warn('cargarConfiguracion falló:', e); }
@@ -5000,6 +5268,56 @@ async function iniciarZonaPrivada() {
   wirePagosUI?.();
   wireDisponibleAuto?.();
   refrescarDisponibleGlobal?.();
+}
+// === RUTAS PRIVADAS protegidas por suscripción (debe estar antes de boot) ===
+window.RUTAS_PRIVADAS = new Set([
+  '/cargar_configuracion',
+  '/cargar_bills',
+  '/cargar_ingresos',
+  '/cargar_egresos',
+  '/cargar_pagos',
+  '/cargar_perfil'
+]);
+
+// Estados globales iniciales (por si no existían aún)
+window.__sessionOK = !!window.__sessionOK;
+window.__paywall   = !!window.__paywall;
+// === CONTROL DE PAYWALL (anti-parpadeos) ===
+window.__billingLock = false;
+window.__lastBilling = null;
+window.__suppressPaywall = true;   // empezamos silenciando paywall
+window.__paywallShown = false;     // evita mostrarlo más de una vez
+
+async function refreshBilling() {
+  if (window.__billingLock) return window.__lastBilling;
+  window.__billingLock = true;
+  try {
+    const r = await fetch('/billing_status', { credentials:'same-origin', cache:'no-store' });
+    const j = await r.json().catch(() => ({}));
+    window.__lastBilling = j;
+    return j;
+  } finally {
+    window.__billingLock = false;
+  }
+}
+
+function shouldShowPaywall(j) {
+  if (window.__suppressPaywall) return false;     // no mostrar mientras suprimido
+  if (!j || j.ok === false) return false;
+  // Si está pago y activo → nunca paywall
+  if (j.plan === 'paid' && j.is_active) return false;
+  // Si está en trial con días restantes → tampoco
+  if (j.plan === 'trial' && (j.days_left ?? 0) > 0) return false;
+  return true;
+}
+
+// Muestra una sola vez y solo si toca
+function maybeShowPaywall(j) {
+  if (window.__paywallShown) return;
+  if (shouldShowPaywall(j)) {
+    window.__paywallShown = true;
+    try { mostrarPaywallSuscripcion?.(); } catch {}
+  }
 }
 
 async function boot() {
@@ -5034,18 +5352,30 @@ if (!ses || ses.ok === false || !ses.user) {
   return;
 }
 
-// d) Autenticado
-_marcarSesion(true);
-const user = ses.user || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
-try { sessionStorage.setItem('usuario', JSON.stringify(user)); } catch {}
+  // d) Autenticado:
+   _marcarSesion(true);
+  const user = ses.user || { id: ses.id, email: ses.email, nombre: ses.nombre || ses.email };
+  try { sessionStorage.setItem('usuario', JSON.stringify(user)); } catch {}
 
-await iniciarZonaPrivada(); // carga datos
-// PRIMERO ocultamos el splash y LUEGO mostramos la zona privada (si no la mostraste antes)
-ocultarSplash(() => {
-  mostrarZonaPrivada?.(user);
-  checkAccountStatus?.();
-  enforceAuthView?.();
-});
+  // ⛔ Silencia el paywall mientras pedimos el estado
+  window.__suppressPaywall = true;
+  const st = await refreshBilling();          // <- ESPERAMOS billing fresco
+  window.__suppressPaywall = false;
+
+  // Si NO hay paywall, carga datos; si sí, muestra el paywall (una vez)
+  const habemusPaywall =
+    !st || (st.plan !== 'paid' && !(st.plan === 'trial' && (st.days_left ?? 0) > 0));
+  if (!habemusPaywall) {
+    await iniciarZonaPrivada();
+  } else {
+    maybeShowPaywall(st);
+  }
+
+  // Luego muestra UI normal
+  ocultarSplash(() => {
+    mostrarZonaPrivada?.(user);
+    enforceAuthView?.();
+  });
 }
 
 // --- registrar accesos globales ---
@@ -5053,3 +5383,326 @@ registerGlobals(); // con la versión “segura” ya no hace falta el try/catch
 
 // 3) ÚNICO listener de arranque (asegúrate de no tener otro en el archivo)
 document.addEventListener('DOMContentLoaded', boot);
+
+// === SUSCRIPCIÓN (Stripe) ===
+// ÚNICA definición
+async function suscribirme() {
+  const btn = document.getElementById('btn-suscribirme');
+  btn?.setAttribute('disabled', 'true');
+  try {
+    const resp = await fetch('/create_checkout_session', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok && data.url) {
+      window.location.assign(data.url);   // redirige a Stripe
+      return;
+    }
+    Swal?.fire('Ups', data.error || 'No se pudo crear la sesión de pago.', 'error');
+  } catch (err) {
+    Swal?.fire('Ups', 'Error de conexión creando la sesión de pago.', 'error');
+  } finally {
+    btn?.removeAttribute('disabled');
+  }
+}
+window.suscribirme = suscribirme;
+
+async function refrescarEstadoCuenta() {
+  try {
+    const r = await fetch('/account_status');
+    const j = await r.json();
+    if (!j.ok) throw 0;
+    const bell = document.getElementById('btn-suscribirme');
+    if (!bell) return;
+
+    // mostrar campana si no está paid o si trial venció
+    const showBell = (j.plan !== 'paid') && !(j.plan === 'trial' && j.days_left > 0);
+    bell.style.display = showBell ? '' : 'none';
+  } catch (e) {
+    /* ignore */
+  }
+}
+(function(){
+  const q = new URLSearchParams(location.search);
+  const chk = q.get('checkout');
+  if (chk === 'success') {
+    Swal.fire({ icon:'success', title:'¡Suscripción activada!', timer:1500, showConfirmButton:false });
+    history.replaceState({}, '', location.pathname); // limpia la query
+    refrescarEstadoCuenta();
+  } else if (chk === 'cancel') {
+    Swal.fire({ icon:'info', title:'Pago cancelado', timer:1200, showConfirmButton:false });
+    history.replaceState({}, '', location.pathname);
+  }
+})();
+// --- DEBUG / CABLEADO EXPLÍCITO DEL BOTÓN ---
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btn-suscribirme')
+    ?.addEventListener('click', onBellClick, { passive: true });
+});
+
+// Detecta retorno de Stripe y reacciona (versión pro)
+(async function onCheckoutReturn() {
+  const q = new URLSearchParams(location.search);
+  const flag = q.get('checkout');
+  if (!flag || window.__stripeHandled) return;   // anti-doble
+
+  window.__stripeHandled = true;
+  window.__waitingStripeVerify = (flag === 'success'); // pausa cargas de datos
+
+  const cleanURL = () => {
+    const u = new URL(location.href);
+    ['checkout','session_id'].forEach(k => u.searchParams.delete(k));
+    history.replaceState({}, '', u.pathname + (u.search ? `?${u.search}` : '') + u.hash);
+    window.__waitingStripeVerify = false;  // levantamos la pausa
+  };
+
+  try {
+    if (flag === 'success') {
+      const sid = q.get('session_id');
+
+      // 1) Verifica en backend y/o fuerza sync por si Stripe tarda un pelín
+      if (sid) {
+        try { await fetch(`/checkout_verify?session_id=${encodeURIComponent(sid)}`, {credentials:'same-origin'}); } catch {}
+      }
+      try { await fetch('/billing_sync', {method:'POST', credentials:'same-origin'}); } catch {}
+
+      // 2) Refresca UI/estado
+      try { await refrescarEstadoCuenta?.(); } catch {}
+
+      // 3) Oculta campanita si ya queda activa
+      document.getElementById('btn-suscribirme')?.style.setProperty('display', 'none', 'important');
+
+      // 4) Mensaje lindo 🎉
+      await Swal.fire({
+        icon: 'success',
+        title: '¡Suscripción activada! 💜',
+        text: 'Tu acceso completo ya está disponible.',
+        customClass: { popup:'gastos', confirmButton:'btn-gastos' },
+        buttonsStyling: false,
+        timer: 1500,
+        showConfirmButton: false
+      });
+
+      // 5) Quita paywall por si estaba activo
+      window.__paywall = false;
+
+    } else if (flag === 'cancel') {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Pago cancelado',
+        timer: 1200,
+        showConfirmButton: false,
+        customClass: { popup:'gastos', confirmButton:'btn-gastos' },
+        buttonsStyling: false
+      });
+    }
+  } finally {
+    cleanURL();
+  }
+})();
+
+// ========= Billing (campanita) =========
+// Formatea ISO a hora local boni
+function _fmtLocal(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString([], { year:'numeric', month:'short', day:'2-digit' });
+  } catch { return ""; }
+}
+
+// Abre el portal de facturación de Stripe
+async function openBillingPortal() {
+  const res = await fetch('/billing_portal', { method:'POST' });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.ok || !j.url) {
+    throw new Error(j.error || `No pudimos abrir el portal de facturación.`);
+  }
+  window.location.assign(j.url);
+}
+
+// (Re)utilizamos tu checkout
+async function suscribirme() {
+  const btn = document.getElementById('btn-suscribirme');
+  btn?.setAttribute('disabled','true');
+  try {
+    const r = await fetch('/create_checkout_session', { method:'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok || !j.url) throw new Error(j.error || 'No se pudo crear la sesión de pago.');
+    window.location.assign(j.url);
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Ups', text: err.message || 'No se pudo iniciar el pago.' });
+  } finally {
+    btn?.removeAttribute('disabled');
+  }
+}
+window.suscribirme = suscribirme; // por si lo llamas desde otros lados
+
+// [NUEVO] backfill: si falta next_charge_at lo pide a Stripe y lo guarda
+async function syncNextChargeIfMissing() {
+  try {
+    const r = await fetch('/billing_sync', { method: 'POST', credentials: 'same-origin' });
+    return await r.json();
+  } catch { return {}; }
+}
+
+// [NUEVO] helper para pedir el estado de facturación
+async function getBillingStatus() {
+  const r = await fetch('/billing_status', { credentials:'same-origin' });
+  const j = await r.json();
+  if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+// Helper opcional (ya lo tenías, lo dejo por si falta)
+async function syncNextChargeIfMissing() {
+  const r = await fetch('/billing_sync', { method:'POST', credentials:'same-origin' });
+  return r.json();
+}
+
+// Click de la campana
+// Helper: sincroniza la próxima fecha si falta
+async function syncNextChargeIfMissing() {
+  const r = await fetch('/billing_sync', { method:'POST', credentials:'same-origin' });
+  return r.json();
+}
+
+// Click de la campana
+let __bellBusy = false;
+
+// Click de la campana
+async function onBellClick() {
+  if (window.__waitingStripeVerify) return;  // no abrir nada mientras verificamos
+  if (Swal?.isVisible?.() || window.__modalGate) return; // si ya hay modal, no dupliques
+
+  if (__bellBusy) return;
+  __bellBusy = true;
+  try {
+    let r = await fetch('/billing_status', { credentials:'same-origin' });
+    let j = await r.json();
+    if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+
+    // Suscripción activa (plan pago)
+    if (j.plan === 'paid' && j.is_active) {
+      if (!j.next_charge_at) {
+        const k = await syncNextChargeIfMissing();
+        if (k?.ok && k.next_charge_at) {
+          const r2 = await fetch('/billing_status', { credentials:'same-origin' });
+          const j2 = await r2.json().catch(()=> ({}));
+          if (j2?.ok) j = j2;
+        }
+      }
+
+      const whenHuman = j.next_charge_at ? _fmtLocal(j.next_charge_at) : (j.next_charge_date_human || null);
+      const msgHuman  = j.next_charge_message || (() => {
+        const d = Number.isFinite(j.days_to_next_charge) ? j.days_to_next_charge : null;
+        if (d == null) return '';
+        if (d <= 0) return 'El cobro es hoy 🎉';
+        if (d === 1) return 'Mañana ✨';
+        if (d <= 3) return `Faltan ${d} días ⏳`;
+        if (d === 7) return 'En una semana 🗓️';
+        if (d >= 28) return 'En ~1 mes 📆';
+        return `Faltan ${d} días 📅`;
+      })();
+
+      const html = [
+        'Tu suscripción está <b>activa</b>.',
+        whenHuman ? `Próximo cobro: <b>${whenHuman}</b>.` : '',
+        msgHuman ? `<span>${msgHuman}</span>` : ''
+      ].filter(Boolean).join('<br>');
+
+      const result = await Swal.fire({
+        icon: 'success',
+        title: 'Suscripción activa',
+        html,
+        showCancelButton: true,
+        confirmButtonText: 'Gestionar',
+        cancelButtonText: 'Cerrar',
+        allowOutsideClick: false,   // 👈 no se cae por eventos externos
+        allowEscapeKey: false,      // 👈 idem
+        customClass: {
+          popup: 'gastos',
+          confirmButton: 'btn-gastos',
+          cancelButton: 'btn-gastos-sec',
+        },
+        buttonsStyling: false
+      });
+      if (result.isConfirmed) await openBillingPortal();
+
+      const bell = document.getElementById('btn-suscribirme');
+      bell?.setAttribute('title', whenHuman ? `Activa · Próximo: ${whenHuman}` : 'Activa');
+      return;
+    }
+
+    // Trial vigente
+    if (j.plan === 'trial' && (j.days_left ?? -1) >= 0) {
+      const d = j.days_left ?? 0;
+      const msg = d === 0 ? 'Tu prueba termina hoy 🎉' : `Te quedan ${d} día${d===1?'':'s'} de prueba ⏳`;
+      const res = await Swal.fire({
+        icon: d <= 3 ? 'warning' : 'info',
+        title: 'Prueba gratuita',
+        text: msg,
+        showCancelButton: true,
+        confirmButtonText: 'Suscribirme',
+        cancelButtonText: 'Seguir en prueba',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        customClass: { popup:'gastos', confirmButton:'btn-gastos', cancelButton:'btn-gastos-sec' },
+        buttonsStyling: false
+      });
+      if (res.isConfirmed) await suscribirme();
+      return;
+    }
+
+    // Inactiva / trial vencido
+    const go = await Swal.fire({
+      icon: 'error',
+      title: 'Acceso restringido',
+      text: 'Tu prueba terminó o tu cuenta no está activa. Suscríbete para continuar.',
+      confirmButtonText: 'Suscribirme',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      customClass: { popup:'gastos', confirmButton:'btn-gastos' },
+      buttonsStyling: false
+    });
+    if (go.isConfirmed) await suscribirme();
+
+ } catch (err) {
+    console.error('[bell]', err);
+    Swal.fire({
+      icon:'error', title:'Ups',
+      text:'No pudimos consultar el estado de tu suscripción.',
+      customClass: { popup: 'gastos', confirmButton: 'btn-gastos' },
+      buttonsStyling:false
+    });
+  } finally {
+    __bellBusy = false; // ✅ siempre liberamos
+  }
+}
+
+// Cableado del botón (una sola vez)
+document.addEventListener('DOMContentLoaded', () => {
+  const bell = document.getElementById('btn-suscribirme');
+  if (bell) {
+    bell.removeAttribute('onclick'); // por si quedó alguno inline
+    bell.addEventListener('click', onBellClick, { passive: true });
+  }
+}, { once:true });
+
+// (Opcional) al entrar, pintar tooltip según estado actual
+async function pintarTooltipCampana() {
+  try {
+    const r = await fetch('/billing_status');
+    const j = await r.json();
+    const bell = document.getElementById('btn-suscribirme');
+    if (!bell || !j.ok) return;
+    if (j.plan === 'paid' && j.is_active) {
+      const when = j.next_charge_at ? _fmtLocal(j.next_charge_at) : '';
+      bell.title = when ? `Activa · Próximo: ${when}` : 'Activa';
+    } else if (j.plan === 'trial' && (j.days_left ?? -1) >= 0) {
+      const d = j.days_left ?? 0;
+      bell.title = d === 0 ? 'Tu prueba termina hoy' : `Prueba: ${d} día${d===1?'':'s'} restantes`;
+    } else {
+      bell.title = 'Suscribirme';
+    }
+  } catch {}
+}
+window.pintarTooltipCampana = pintarTooltipCampana;

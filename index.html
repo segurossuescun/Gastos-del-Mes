@@ -57,7 +57,12 @@
  <div id="contenido-app" style="display: none;">
     <div id="barra-superior" style="display:none;" class="barra-superior">
     <div class="barra-izquierda">
-      <button id="btn-perfil" class="btn-perfil" type="button">👤 Perfil</button>
+       <!-- 👤 Perfil: icon-only con tooltip -->
+      <button id="btn-perfil"
+              class="icon-btn"
+              type="button"
+              title="Perfil"
+              aria-label="Perfil">👤</button>
       <button id="abrir-configuracion" class="btn-config" title="Configuración">⚙️</button>
 
       <!-- 📞 fijo en el DOM -->
@@ -81,6 +86,12 @@
     </div>
 
     <div class="barra-derecha">
+      <!-- 🔔 Suscribirme: icon-only, visible solo en trial -->
+      <button id="btn-suscribirme"
+              class="icon-btn"
+              type="button"
+              title="Suscribirme"
+              aria-label="Suscribirme">🔔</button>
       <button id="cerrar-sesion-barra">❌ Salir</button>
     </div>
   </div>
@@ -605,6 +616,34 @@
       }
     });
   }
+</script>
+<script>
+  (function handleCheckoutReturnVerified(){
+    const url = new URL(window.location.href);
+    const sid = url.searchParams.get('sid');   // lo ponemos así si más tarde vuelves a pasar sid
+    if (!sid) return;
+
+    fetch(`/checkout_verify?session_id=${encodeURIComponent(sid)}`, { credentials:'same-origin' })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok && res.is_active) {
+          Swal.fire({
+            icon:'success',
+            title:'¡Gracias por suscribirte! 💜',
+            text:'Tu acceso está activo más allá de la prueba.',
+            customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+            buttonsStyling:false
+          });
+        }
+        // Limpia la URL para que no reaparezca
+        url.searchParams.delete('sid');
+        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
+      })
+      .catch(() => {
+        url.searchParams.delete('sid');
+        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
+      });
+  })();
 </script>
 </body>
 </html>

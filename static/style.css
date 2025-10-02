@@ -427,6 +427,37 @@ form button,
   color: #553071;
   word-break: break-word;
 }
+/* === Estilo píldora morada, igual que los otros iconitos === */
+.barra-superior #btn-perfil,
+.barra-superior #btn-suscribirme {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+
+  height: 24px;
+  min-width: 28px;
+  padding: 2px 6px;
+  margin: 0 4px 0 0;
+
+  line-height: 1;
+  font-size: 1rem;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+
+  /* “marquito” morado */
+  background-image: linear-gradient(to right, rgb(154, 39, 247), rgb(238, 196, 232)) !important;
+  background-color: transparent !important;
+  color: #fff !important;
+
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55),
+              0 4px 12px rgba(154,39,247,.25);
+}
+
+.barra-superior #btn-perfil:hover,
+.barra-superior #btn-suscribirme:hover {
+  background: #edb0f7 !important;
+}
 
 /* ================================
    HEADER
@@ -1928,5 +1959,68 @@ body:not(.auth) #seccion-login,
 body:not(.auth) #seccion-registro {
   display: block !important;
 }
+/* ===== Modal de la campanita (SweetAlert2) con variables de Confi ===== */
+.swal2-popup.gastos{
+  border-radius: 18px;
+  padding: 28px 24px;
+  width: min(520px, 92vw);
+  color: var(--color-texto, #553071);
+  font-family: var(--fuente-secundaria, inherit);
+}
 
+/* Evita que reglas globales lo bajen a 12px */
+.swal2-popup.gastos .swal2-title{
+  font-family: var(--fuente-titulo, inherit) !important;
+  font-size: 22px !important;
+  margin-bottom: 6px;
+  color: var(--color-texto, #553071);
+}
+.swal2-popup.gastos .swal2-html-container{
+  font-size: 16px !important;
+  line-height: 1.5;
+}
 
+/* ¡Aquí va el espaciado! */
+.swal2-popup.gastos .swal2-actions{
+  gap: 12px;                 /* separa “Gestionar” de “Cerrar” */
+  margin-top: 16px;
+  flex-wrap: wrap;           /* por si no entra en móvil */
+}
+
+/* Botones en armonía con la app */
+.btn-gastos{
+  background: linear-gradient(90deg, var(--btn-inicio, #9a27f7), var(--btn-fin, #6664ff));
+  color:#fff; border:0; border-radius:12px;
+  padding:10px 18px; font-weight:700; font-size:15px;
+  box-shadow: 0 6px 14px rgba(0,0,0,.15);
+  cursor: pointer;
+  min-width: 140px;          /* para que “Gestionar” no se corte ni se vea chiquito */
+}
+.btn-gastos-sec{
+  background:#eef0f4; color:#6b7280;
+  border:0; border-radius:12px;
+  padding:10px 18px; font-weight:700; font-size:15px;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+/* Responsive suave */
+@media (max-width: 480px){
+  .swal2-popup.gastos{ padding:22px 18px; }
+  .swal2-popup.gastos .swal2-title{ font-size: 20px !important; }
+  .swal2-popup.gastos .swal2-html-container{ font-size: 15px !important; }
+  .swal2-popup.gastos .swal2-actions{ gap: 10px; }
+}
+/* Campanita: bajar la negrita en ambos botones */
+.swal2-popup.gastos .btn-gastos,
+.swal2-popup.gastos .btn-gastos-sec{
+  font-weight: 500 !important;   /* usa 400 si los quieres más delgaditos */
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
+}
+:root{ --swal-btn-fs:18px; }
+.swal2-popup.gastos .btn-gastos,
+.swal2-popup.gastos .btn-gastos-sec{ font-size: var(--swal-btn-fs) !important; }
+/* evita cualquier “flash” de zona privada tras logout */
+body.state-logout #zona-privada { display: none !important; }
+body.state-logout #seccion-login { display: block !important; }
