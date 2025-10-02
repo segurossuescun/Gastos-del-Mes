@@ -1368,12 +1368,22 @@ function showResetPasswordDialog(token) {
     const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
     const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
     const password = document.getElementById('registro-password')?.value || "";
+    const pass2    = document.getElementById('registro-password2')?.value || "";
 
     if (!usuario || !password) {
       Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
       return;
     }
+    if (password !== pass2) {
+      Swal.fire({ icon:'info', title:'Las contraseñas no coinciden' });
+      return;
+    }
     const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
+
+    if (password.length < 6) {
+      Swal.fire({ icon:'info', title:'Contraseña muy corta', text:'Mínimo 6 caracteres.' });
+      return;
+    }
 
     try {
       const res = await fetch('/registro', {
@@ -6048,3 +6058,48 @@ async function pintarTooltipCampana() {
   } catch {}
 }
 window.pintarTooltipCampana = pintarTooltipCampana;
+
+// Probar gratis → desplaza al registro y enfoca "Nombre y Apellido"
+(function wireProbarGratis(){
+  const btn    = document.getElementById('btn-probar-gratis');
+  const target = document.getElementById('seccion-registro');
+
+  // Preferimos el input de Nombre y Apellido
+  let nameInp  = document.getElementById('registro-nombre');
+  // Fallback por si no existiera (o mientras editas)
+  const userInp = document.getElementById('registro-user');
+
+  // ⚠️ Hot-fix por si hay IDs duplicados: deja sólo el primero con el id
+  const dups = document.querySelectorAll('#registro-nombre');
+  if (dups.length > 1) {
+    nameInp = dups[0];
+    for (let i = 1; i < dups.length; i++) dups[i].removeAttribute('id');
+  }
+
+  if (!btn || !target) {
+    document.addEventListener('DOMContentLoaded', wireProbarGratis, { once:true });
+    return;
+  }
+
+  btn.addEventListener('click', async () => {
+    target.scrollIntoView({ behavior:'smooth', block:'start' });
+    target.classList.add('resalte');
+    setTimeout(() => target.classList.remove('resalte'), 1400);
+
+    // 👇 ahora enfoca Nombre y Apellido (o usuario si no existiera)
+    const el = nameInp || userInp;
+    el?.focus();
+    // (opcional) coloca el cursor al final
+    if (el) { const v = el.value; el.value = ''; el.value = v; }
+
+    try {
+      await Swal.fire({
+        icon:'info',
+        title:'Tu prueba empieza al registrarte',
+        text:'7 días de acceso completo. Sin tarjeta.',
+        timer:1700,
+        showConfirmButton:false
+      });
+    } catch {}
+  });
+})();

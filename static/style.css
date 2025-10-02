@@ -2024,3 +2024,64 @@ body:not(.auth) #seccion-registro {
 /* evita cualquier “flash” de zona privada tras logout */
 body.state-logout #zona-privada { display: none !important; }
 body.state-logout #seccion-login { display: block !important; }
+
+.nota-legal{
+  margin-top:.5rem; font-size:.85rem; color:#666;
+}
+.nota-legal a{ color:#0ea5e9; text-decoration:underline; }
+/* Oculta el banner verde clásico si quedó en el DOM */
+.login-banner { display: none !important; }
+
+/* Banner morado bonito */
+.hero-banner{
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.75rem 1rem; border-radius:14px; 
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
+}
+.hero-purple{ background:#F3E8FF; border:1px solid #E9D5FF; color:#4C1D95; }
+.hero-banner__txt{ font-weight:600; }
+
+/* Botón del banner */
+.btn-primario{
+  background:#7C3AED; color:#fff; border:none; border-radius:10px;
+  padding:.5rem .9rem; cursor:pointer; font-weight:700;
+}
+
+/* 💜 Coloca el banner con aire y centrado respecto al formulario */
+#seccion-usuario .login-hero{
+  margin: 20px auto 14px;               /* arriba / laterales-auto / abajo  */
+  width: min(100%, 560px);              /* que no sea más ancho que el form */
+}
+
+/* Un pelín de aire antes del título */
+#seccion-usuario h3{ margin-top: 6px; }
+
+/* Si tienes barra fija arriba, evita que el primer scroll lo tape */
+#usuario{ scroll-margin-top: 72px; }
+/* Espacio superior del bloque de registro */
+#usuario .form-container{
+  padding-top: 32px !important;   /* súbelo a 40–48px si quieres más aire */
+}
+
+/* Y un margen propio del banner, por si también quieres separarlo del borde del form */
+#usuario .form-container .login-hero{
+  margin-top: 16px !important;    /* puedes subirlo a 24px si te gusta más suelto */
+  margin-bottom: 14px !important;
+  width: min(100%, 560px);
+  margin-left: auto;
+  margin-right: auto;             /* centrado respecto al formulario */
+}
+/* Texto del banner más fino (mata cualquier bold heredado) */
+#banner-txt{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+  font-weight:500 !important;       /* prueba 300 si lo quieres aún más fino */
+  font-synthesis-weight: none !important;  /* evita el “faux bold” del navegador */
+  letter-spacing: .2px;
+  line-height: 1.15;
+}
+/* Solo el botón "Probar gratis" del banner */
+#btn-probar-gratis{
+  font-weight: 700 !important;      /* estaba en 700; prueba 400 si lo quieres más fino */
+  letter-spacing: .2px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; /* opcional */
+}

@@ -487,6 +487,13 @@
     <!-- Registro -->
   <div id="usuario" class="vista">
     <div id="seccion-usuario" class="form-container">
+      <!-- Micro-banner Prueba gratis -->
+      <div class="hero-banner hero-purple">
+        <div id="banner-txt" class="hero-banner__txt">
+          🎁 Prueba gratis 7 días. Sin tarjeta.
+        </div>
+        <button id="btn-probar-gratis" type="button" class="btn-primario">Prueba Gratis</button>
+      </div>
     <h3>
         <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="#553071" viewBox="0 0 24 24">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
@@ -498,7 +505,7 @@
       <h4>📝 Registro</h4>
       <form id="form-registro">
         <!-- Nombre -->
-        <input type="text" id="registro-nombre" placeholder="Nombre" required>
+        <input type="text" id="registro-nombre" placeholder="Nombre y Apellido" required>
 
         <!-- Usuario + Dominio -->
         <div class="correo-container">
@@ -526,6 +533,12 @@
           <span class="boton-ojo">👁️</span>
         </div>
 
+        <!-- Confirmar contraseña -->
+        <div class="input-con-ojo">
+          <input type="password" id="registro-password2" placeholder="Repite la contraseña" required>
+          <span class="boton-ojo">👁️</span>
+        </div>
+
         <!-- Nota -->
         <small style="
           font-family: Arial, sans-serif;
@@ -538,27 +551,36 @@
           La contraseña debe tener entre <strong>8–16</strong> caracteres, con al menos: 
           <strong>Mayúsculas, Minúsculas, Números</strong> y símbolos como <strong>(* & ^ % $ # @ !)</strong>.
         </small>
-        <button type="submit">Crear cuenta</button>
+        <button type="submit">Crear Cuenta</button>
+
+        <p class="nota-legal">
+          Al registrarte aceptas los
+          <a href="/terminos" target="_blank" rel="noopener">Términos</a> y la
+          <a href="/privacidad" target="_blank" rel="noopener">Política de Privacidad</a>.
+        </p>
 
       </form>
     </div>
-<!-- Login -->
-<div id="seccion-login">
-  <h4>🔒 Iniciar sesión</h4>
-  <form id="form-login">
-    <input type="text" id="login-usuario" placeholder="Usuario" required>
 
-    <div class="input-con-ojo">
-      <input type="password" id="login-password" placeholder="Contraseña" required>
-      <span class="boton-ojo">👁️</span>
+    <!-- Login -->
+    <div id="seccion-login">
+      <h4>🔒 Iniciar sesión</h4>
+
+      <form id="form-login">
+        <input type="email" id="login-usuario" placeholder="Correo" required autocomplete="username" />
+
+        <div class="input-con-ojo">
+          <input type="password" id="login-password" placeholder="Contraseña" required autocomplete="current-password" />
+          <span class="boton-ojo">👁️</span>
+        </div>
+
+        <div class="fila-aux">
+          <a href="#" id="forgot-link" class="enlace-min">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <button type="submit">Entrar</button>
+      </form>
     </div>
-
-    <!-- AQUÍ el enlace -->
-    <a href="#" id="forgot-link" class="link-secundario">¿Olvidaste tu contraseña?</a>
-
-    <button type="submit">Entrar</button>
-  </form>
-</div>
 
     <!-- Zona privada -->
       <div id="zona-privada" style="display:none;">
