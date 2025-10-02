@@ -2126,6 +2126,91 @@ def billing_portal():
         import traceback; traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 400
     
+    # ========= Forgot / Reset Password =========
+import secrets
+from datetime import datetime, timedelta, timezone
+
+def _send_email(to_email: str, subject: str, html: str):
+    """
+    PROD: Integra SendGrid/Mailgun/Brevo.
+    DEV: por ahora sólo imprime el link en logs.
+    """
+    print(f"[mail-> {to_email}] {subject}\n{html}\n")
+
+@app.post("/forgot_password")
+def forgot_password():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        # misma respuesta para evitar enumeración
+        return jsonify({"ok": True})
+
+    # busca usuario
+    with engine.begin() as conn:
+        u = conn.execute(text("SELECT id, email FROM users WHERE lower(email)=:e LIMIT 1"),
+                         {"e": email}).mappings().first()
+
+    # siempre devolvemos ok (no revelar si existe)
+    if not u:
+        return jsonify({"ok": True})
+
+    # genera token 1 hora
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO password_resets (user_id, token, expires_at)
+            VALUES (:uid, :tok, :exp)
+        """), {"uid": u["id"], "tok": token, "exp": expires})
+
+    # arma link de reseteo
+    link = f"{PUBLIC_BASE_URL}/?reset_token={token}"
+    _send_email(
+        to_email=u["email"],
+        subject="Restablecer contraseña",
+        html=f"""
+        <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+        <p>Haz clic aquí (válido por 1 hora): <a href="{link}">{link}</a></p>
+        <p>Si no fuiste tú, ignora este correo.</p>
+        """
+    )
+    return jsonify({"ok": True})
+
+@app.post("/reset_password")
+def reset_password():
+    data = request.get_json(force=True, silent=True) or {}
+    token = (data.get("token") or "").strip()
+    newp = (data.get("password") or "").strip()
+
+    # validación simple
+    if len(newp) < 8:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 8 caracteres"}), 400
+
+    # valida token
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT pr.id, pr.user_id
+            FROM password_resets pr
+            WHERE pr.token=:t
+              AND pr.used=false
+              AND pr.expires_at > now()
+            LIMIT 1
+        """), {"t": token}).mappings().first()
+
+        if not row:
+            return jsonify({"ok": False, "error": "Token inválido o expirado"}), 400
+
+        # actualiza contraseña y marca token como usado
+        conn.execute(text("""
+            UPDATE users SET password_hash=:ph, updated_at=now() WHERE id=:uid
+        """), {"ph": generate_password_hash(newp), "uid": row["user_id"]})
+
+        conn.execute(text("UPDATE password_resets SET used=true WHERE id=:id"),
+                     {"id": row["id"]})
+
+    return jsonify({"ok": True})
+    
 # ---------------------------
 # Run
 # ---------------------------

@@ -543,19 +543,22 @@
       </form>
     </div>
 <!-- Login -->
-    <div id="seccion-login">
-      <h4>🔒 Iniciar sesión</h4>
-      <form id="form-login">
-        <input type="text" id="login-usuario" placeholder="Usuario" required>
+<div id="seccion-login">
+  <h4>🔒 Iniciar sesión</h4>
+  <form id="form-login">
+    <input type="text" id="login-usuario" placeholder="Usuario" required>
 
-        <div class="input-con-ojo">
-          <input type="password" id="login-password" placeholder="Contraseña" required>
-          <span class="boton-ojo">👁️</span>
-        </div>
-
-        <button type="submit">Entrar</button>
-      </form>
+    <div class="input-con-ojo">
+      <input type="password" id="login-password" placeholder="Contraseña" required>
+      <span class="boton-ojo">👁️</span>
     </div>
+
+    <!-- AQUÍ el enlace -->
+    <a href="#" id="forgot-link" class="link-secundario">¿Olvidaste tu contraseña?</a>
+
+    <button type="submit">Entrar</button>
+  </form>
+</div>
 
     <!-- Zona privada -->
       <div id="zona-privada" style="display:none;">
@@ -571,32 +574,32 @@
   </div>
 </main>
 
-<!-- 1) Flags de entorno + versión (auto) -->
+<!-- 1) Flags de entorno + versión -->
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
-  // En local, forzamos NO prod. En hosting real, prod=true salvo que tú lo cambies.
-  window.__PROD__    = __LOCAL__ ? false : true;
-  window.__VERSION__ = "1.0.2";
-
-  // logs (silenciados en prod)
+  window.__PROD__    = __LOCAL__ ? false : true;   // en hosting real quedará true
+  window.__VERSION__ = "1.0.3";                    // ⬅️ súbela en cada deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
 </script>
 
-<!-- 2) Config cliente opcional (no rompe si no existe) -->
+<!-- 2) Config cliente opcional -->
 <script>
   window.APP = { apiBase: "/", enableAnalytics: false, brand:{name:"Gastos del Mes"} };
 </script>
 
-<!-- 3) Librerías de terceros antes de tu script -->
+<!-- 3) Librerías de terceros -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 
-<!-- 4) Tu app -->
-<script src="/static/script.js?v=1.0.2" defer></script>
-<link rel="stylesheet" href="/static/style.css?v=1.0.2">
+<!-- 4) CSS primero -->
+<link rel="stylesheet" href="/static/style.css?v=1.0.3">
 
+<!-- 5) Tu app -->
+<script src="/static/script.js?v=1.0.3" defer></script>
+
+<!-- 6) Service Worker -->
 <script>
   if ('serviceWorker' in navigator) {
     const esLocal = ['localhost','127.0.0.1'].includes(location.hostname);
@@ -604,12 +607,12 @@
 
     window.addEventListener('load', () => {
       if (esProd) {
-        const v = encodeURIComponent(window.__VERSION__ || '1.0.1');
+        const v = encodeURIComponent(window.__VERSION__ || '1.0.3');
         navigator.serviceWorker.register(`/service-worker.js?v=${v}`)
           .then(reg => console.log('[SW] registrado:', reg.scope))
           .catch(err => console.error('[SW] error:', err));
       } else {
-        // 🔴 DEV: NO registrar y además limpiar cualquier SW/caché previo
+        // DEV: limpia cualquier SW/caché previo
         navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
         caches?.keys?.().then(keys => keys.forEach(k => caches.delete(k)));
         console.log('[SW] DEV: sin service worker (unregistered + caches cleared)');

@@ -23,6 +23,72 @@ window.__modalGate   = window.__modalGate   ?? false;  // evita dobles modales
 window.__privadaInit = window.__privadaInit ?? false;  // evita duplicar cargas privadas
 window.__stripeHandled = window.__stripeHandled ?? false; // anti-doble verificación
 let __paywallShown = false; // mensaje de paywall solo 1 vez
+
+/* =========================
+   ⬇⬇⬇ PEGA ESTE BLOQUE AQUÍ ⬇⬇⬇
+========================= */
+(function handlePasswordResetFromURL() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const token = q.get('reset_token');
+    if (!token) return;
+
+    // evita dobles
+    if (window.__resetModalShown) return;
+    window.__resetModalShown = true;
+
+    const clean = () => {
+      q.delete('reset_token');
+      const rest = q.toString();
+      history.replaceState({}, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    };
+
+    (async () => {
+      const { value: vals } = await Swal.fire({
+        title: 'Nueva contraseña',
+        html:
+          '<input id="pw1" type="password" class="swal2-input" placeholder="Nueva contraseña">' +
+          '<input id="pw2" type="password" class="swal2-input" placeholder="Repite la contraseña">',
+        focusConfirm: false,
+        preConfirm: () => {
+          const p1 = document.getElementById('pw1').value || '';
+          const p2 = document.getElementById('pw2').value || '';
+          if (p1.length < 8) return Swal.showValidationMessage('Mínimo 8 caracteres');
+          if (p1 !== p2)     return Swal.showValidationMessage('No coinciden');
+          return { password: p1 };
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        customClass: { popup:'gastos', confirmButton:'btn-gastos', cancelButton:'btn-gastos-sec' },
+        buttonsStyling: false
+      });
+
+      if (!vals) { clean(); return; }
+
+      const r = await fetch('/reset_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ token, password: vals.password })
+      });
+      const j = await r.json().catch(()=> ({}));
+
+      if (!r.ok || j.ok === false) {
+        await Swal.fire('Ups', j.error || 'No pudimos cambiar la contraseña.', 'error');
+        clean();
+        return;
+      }
+
+      await Swal.fire('Listo', 'Tu contraseña fue actualizada. Ahora inicia sesión.', 'success');
+      clean();
+      document.getElementById('login-password')?.focus();
+    })();
+  } catch (e) {
+    console.warn('reset handler error', e);
+  }
+})();
+
 // =============================
 // CONFIGURACIÓN POR DEFECTO
 // =============================
@@ -1092,8 +1158,190 @@ function mostrarPaywallSuscripcion() {
   })();
 })();
 
-// === Listeners de formularios ===
-// LOGIN
+// === Listeners de formularios ===// LOGIN
+// ¿Olvidaste tu contraseña? (se cablea una sola vez)
+(function wireForgotLink(){
+  const link = document.getElementById('forgot-link');
+  if (!link) {
+    document.addEventListener('DOMContentLoaded', wireForgotLink, { once: true });
+    return;
+  }
+
+  link.addEventListener('click', async (e) => {
+    e.preventDefault();
+
+    const { value: email } = await Swal.fire({
+      icon: 'question',
+      title: 'Restablecer contraseña',
+      input: 'email',
+      inputLabel: 'Escribe tu correo',
+      inputPlaceholder: 'tu@correo.com',
+      showCancelButton: true,
+      confirmButtonText: 'Enviar enlace',
+      cancelButtonText: 'Cancelar',
+      customClass: { popup:'gastos', confirmButton:'btn-gastos', cancelButton:'btn-gastos-sec' },
+      buttonsStyling: false,
+      inputValidator: v => (!v ? 'Ingresa tu correo' : undefined)
+    });
+    if (!email) return;
+
+    try {
+      const r = await fetch('/forgot_password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ email })
+      });
+
+      // Siempre respondemos “ok” para no revelar si existe o no
+      await r.json().catch(() => ({}));
+
+      await Swal.fire({
+        icon: 'info',
+        title: 'Si el correo existe…',
+        text: 'Te enviamos un enlace para restablecer la contraseña.',
+        customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+        buttonsStyling:false
+      });
+    } catch {
+      Swal.fire({
+        icon:'error',
+        title:'Ups',
+        text:'No pudimos procesar tu solicitud. Intenta de nuevo.',
+        customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+        buttonsStyling:false
+      });
+    }
+  });
+})();
+
+// Detecta el token en la URL y abre el modal de reset
+(function openResetIfToken(){
+  const q = new URLSearchParams(location.search);
+  const tok = q.get('reset_token');
+  if (!tok) return;
+
+  // Pon el token en el input oculto del modal
+  const hid = document.getElementById('reset-token');
+  if (hid) hid.value = tok;
+
+  // Abre tu modal (ajusta a cómo lo abres en tu UI)
+  document.getElementById('modal-reset')?.classList.add('abierto');
+
+  // Limpia la query para evitar reabrir al refrescar
+  q.delete('reset_token');
+  history.replaceState({}, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+})();
+
+// Envío del formulario de nueva contraseña
+(function wireResetForm(){
+  const form = document.getElementById('form-reset');
+  if (!form) { document.addEventListener('DOMContentLoaded', wireResetForm, { once:true }); return; }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const token = document.getElementById('reset-token')?.value?.trim();
+    const pass  = document.getElementById('reset-password')?.value || '';
+
+    if (!token) {
+      Swal.fire({ icon:'error', title:'Token inválido', text:'Vuelve a solicitar el enlace.' });
+      return;
+    }
+    if (pass.length < 8) {
+      Swal.fire({ icon:'info', title:'Contraseña muy corta', text:'Mínimo 8 caracteres.' });
+      return;
+    }
+
+    try {
+      const r = await fetch('/reset_password', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ token, password: pass })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.ok === false) throw new Error(data.error || `HTTP ${r.status}`);
+
+      await Swal.fire({ icon:'success', title:'¡Contraseña actualizada!' });
+      document.getElementById('modal-reset')?.classList.remove('abierto');
+      // Enfoca el login
+      document.getElementById('seccion-login')?.scrollIntoView({ behavior:'smooth' });
+    } catch (err) {
+      Swal.fire({ icon:'error', title:'No se pudo cambiar', text:String(err?.message||err) });
+    }
+  });
+})();
+
+// === Reset de contraseña con SweetAlert2 (detecta ?reset_token=...) ===
+function showResetPasswordDialog(token) {
+  if (!token) return;
+
+  Swal.fire({
+    icon: 'question',
+    title: 'Restablecer contraseña',
+    html: `
+      <input id="rp1" type="password" class="swal2-input" placeholder="Nueva contraseña (min 8)">
+      <input id="rp2" type="password" class="swal2-input" placeholder="Repite la nueva contraseña">
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar',
+    preConfirm: () => {
+      const p1 = (document.getElementById('rp1')?.value || '').trim();
+      const p2 = (document.getElementById('rp2')?.value || '').trim();
+      if (p1.length < 8) {
+        Swal.showValidationMessage('La contraseña debe tener al menos 8 caracteres');
+        return false;
+      }
+      if (p1 !== p2) {
+        Swal.showValidationMessage('Las contraseñas no coinciden');
+        return false;
+      }
+      return p1; // devuelve la contraseña válida
+    }
+  }).then(async (res) => {
+    if (!res.isConfirmed) return;
+    const password = res.value;
+
+    try {
+      const r = await fetch('/reset_password', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password })
+      });
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok || data.ok === false) {
+        const msg = data?.error || `Error ${r.status}`;
+        await Swal.fire('No se pudo cambiar', msg, 'error');
+        return;
+      }
+
+      await Swal.fire('Listo ✨', 'Tu contraseña fue actualizada. Inicia sesión de nuevo.', 'success');
+
+      // Limpia el token de la URL para que no se repita el modal
+      const url = new URL(location.href);
+      url.searchParams.delete('reset_token');
+      history.replaceState({}, '', url.pathname + (url.search ? '?' + url.search : '') + url.hash);
+
+      // Muestra pantalla de login
+      try { mostrarPantallaLogin?.(); } catch {}
+    } catch (e) {
+      await Swal.fire('Ups', 'Hubo un problema guardando tu contraseña', 'error');
+    }
+  });
+}
+
+(function openResetIfToken(){
+  const url = new URL(location.href);
+  const token = url.searchParams.get('reset_token');
+  if (token) {
+    showResetPasswordDialog(token);
+  }
+})();
+
 (function wireLoginForm(){
   const form = document.getElementById('form-login');
   if (!form) { document.addEventListener('DOMContentLoaded', wireLoginForm, { once:true }); return; }
@@ -1188,6 +1436,100 @@ function mostrarPaywallSuscripcion() {
       Swal.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
     }
   });
+})();
+
+// Detecta ?reset_token=... en la URL y abre modal para cambiar la clave
+(function handlePasswordResetToken(){
+  const url = new URL(location.href);
+  const token = url.searchParams.get('reset_token');
+  if (!token) return;
+
+  // Limpia la URL al final pase lo que pase
+  const cleanURL = () => {
+    url.searchParams.delete('reset_token');
+    history.replaceState({}, '', url.pathname + (url.search ? '?' + url.search : '') + url.hash);
+  };
+
+  (async () => {
+    // 1) verificación rápida del token
+    try {
+      const ok = await fetch(`/password_reset_verify?token=${encodeURIComponent(token)}`)
+        .then(r => r.ok);
+      if (!ok) {
+        await Swal.fire({
+          icon:'error',
+          title:'Enlace inválido o vencido',
+          text:'Solicita un nuevo enlace desde "¿Olvidaste tu contraseña?"'
+        });
+        cleanURL();
+        return;
+      }
+    } catch {
+      cleanURL();
+      return;
+    }
+
+    // 2) pedir nueva contraseña
+    const { value: pass1 } = await Swal.fire({
+      icon:'question',
+      title:'Nueva contraseña',
+      input:'password',
+      inputPlaceholder:'Mínimo 6 caracteres',
+      inputAttributes:{ minlength: 6 },
+      showCancelButton:true,
+      confirmButtonText:'Continuar',
+      cancelButtonText:'Cancelar',
+      customClass:{ popup:'gastos', confirmButton:'btn-gastos', cancelButton:'btn-gastos-sec' },
+      buttonsStyling:false,
+      inputValidator: v => !v || v.length < 6 ? 'Mínimo 6 caracteres' : undefined
+    });
+    if (!pass1) { cleanURL(); return; }
+
+    const { value: pass2 } = await Swal.fire({
+      icon:'question',
+      title:'Confirmar contraseña',
+      input:'password',
+      inputPlaceholder:'Repite tu nueva contraseña',
+      showCancelButton:true,
+      confirmButtonText:'Cambiar',
+      cancelButtonText:'Cancelar',
+      customClass:{ popup:'gastos', confirmButton:'btn-gastos', cancelButton:'btn-gastos-sec' },
+      buttonsStyling:false,
+      inputValidator: v => v !== pass1 ? 'No coincide' : undefined
+    });
+    if (!pass2) { cleanURL(); return; }
+
+    // 3) confirmar en el backend
+    try {
+      const r = await fetch('/password_reset_confirm', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        credentials:'same-origin',
+        body: JSON.stringify({ token, new_password: pass1 })
+      });
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok || j.ok === false) throw new Error(j.error || 'No se pudo cambiar la contraseña');
+
+      await Swal.fire({
+        icon:'success',
+        title:'¡Listo!',
+        text:'Tu contraseña fue actualizada. Inicia sesión con tu nueva clave.',
+        customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+        buttonsStyling:false
+      });
+
+      // muestra la pantalla de login
+      try { mostrarPantallaLogin?.(); } catch {}
+    } catch (err) {
+      await Swal.fire({
+        icon:'error',
+        title:'No se pudo cambiar',
+        text: String(err?.message || 'Intenta de nuevo con un nuevo enlace.')
+      });
+    } finally {
+      cleanURL();
+    }
+  })();
 })();
 
 // =============================
