@@ -600,7 +600,7 @@
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
   window.__PROD__    = __LOCAL__ ? false : true;   // en hosting real quedará true
-  window.__VERSION__ = "1.0.3";                    // ⬅️ súbela en cada deploy
+  window.__VERSION__ = "1.0.4";                    // ⬅️ súbela en cada deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
@@ -619,7 +619,7 @@
 <link rel="stylesheet" href="/static/style.css?v=1.0.3">
 
 <!-- 5) Tu app -->
-<script src="/static/script.js?v=1.0.3" defer></script>
+<script src="/static/script.js?v=1.0.4" defer></script>
 
 <!-- 6) Service Worker -->
 <script>
@@ -629,7 +629,7 @@
 
     window.addEventListener('load', () => {
       if (esProd) {
-        const v = encodeURIComponent(window.__VERSION__ || '1.0.3');
+        const v = encodeURIComponent(window.__VERSION__ || '1.0.4');
         navigator.serviceWorker.register(`/service-worker.js?v=${v}`)
           .then(reg => console.log('[SW] registrado:', reg.scope))
           .catch(err => console.error('[SW] error:', err));
