@@ -2085,3 +2085,126 @@ body.state-logout #seccion-login { display: block !important; }
   letter-spacing: .2px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; /* opcional */
 }
+/* ✅ Centrado y layout SOLO para tu banner actual */
+.hero-banner{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 980px;
+  margin: 16px auto 14px auto; /* mismo margen que ya usas */
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+
+/* Colores morados del banner (si no los tienes ya) */
+.hero-banner.hero-purple{
+  background: linear-gradient(90deg, #8b68b0, #553071);
+  color: #fff;
+}
+
+/* Texto centrado del banner */
+.hero-banner__txt{
+  text-align: center;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+/* Botón: evita que se pegue a la derecha por márgenes heredados */
+.hero-banner .btn-primario{
+  flex: 0 0 auto;
+  margin-left: 0 !important;
+}
+
+/* Responsive: apilar en móvil y botón al 100% */
+@media (max-width: 520px){
+  .hero-banner{ flex-direction: column; text-align: center; }
+  .hero-banner .btn-primario{ width: 100%; }
+}
+/* Fuerza centrado real del contenido del banner */
+.hero-banner{
+  display: flex;
+  justify-content: center;   /* centra el grupo texto+botón */
+  align-items: center;
+  gap: 12px;
+  text-align: center;        /* centra líneas múltiples del texto */
+}
+
+/* Evita que algún hijo “empuje” al otro con flex-grow o márgenes raros */
+.hero-banner > *{
+  flex: 0 0 auto !important; /* nada crece ni ocupa espacio extra */
+  margin: 0 !important;      /* cancela márgenes heredados traviesos */
+}
+
+/* Botón: cancela cualquier empuje a la derecha */
+.hero-banner .btn-primario{
+  margin-left: 0 !important;
+  transform: none !important; /* por si había algún efecto raro */
+}
+
+/* Texto: sin padding que desplace ópticamente */
+.hero-banner__txt{
+  padding: 0 !important;
+}
+/* === CENTRADO REAL SIN CLASES NUEVAS === */
+
+/* 🔹 Angostar el contenedor del usuario */
+#seccion-usuario{
+  width: min(100%, 440px);     /* antes 480/560 */
+  margin: 0 auto;
+}
+#seccion-registro,
+#seccion-login{
+  max-width: 440px;            /* consistente con el contenedor */
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* 🔹 Botones de los formularios: centrados y lindos */
+#seccion-registro form button,
+#seccion-login form button{
+  width: clamp(170px, 58%, 240px);
+  align-self: center;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 🔹 Banner: evitar deformación y hacerlo del mismo ancho que el bloque */
+.hero-banner{
+  width: min(100%, 440px);     /* mismo ancho que el formulario */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 16px auto 14px;
+  border-radius: 20px;
+}
+
+/* Texto del banner: que no se rompa la línea (truco óptico) */
+.hero-banner__txt{
+  white-space: nowrap;         /* evita salto raro y “aplastamiento” */
+  line-height: 1.2;
+}
+
+/* Botón dentro del banner: NO heredar el ancho de los otros botones */
+.hero-banner .btn-primario{
+  width: auto !important;      /* clave para que no se “estire” ni deforme */
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding-inline: 16px;        /* respirito */
+}
+
+/* (Opcional) Si el 🎁 te desbalancea visualmente el centro */
+#banner-txt{ padding-left: 6px; }
+
+/* Mobile: si queda muy justo, apilar texto y botón */
+@media (max-width: 520px){
+  .hero-banner{
+    flex-direction: column;
+    text-align: center;
+  }
+  .hero-banner__txt{ white-space: normal; } /* permite salto en móvil */
+  .hero-banner .btn-primario{ width: 100% !important; }
+}
