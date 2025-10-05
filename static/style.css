@@ -2208,3 +2208,57 @@ body.state-logout #seccion-login { display: block !important; }
   .hero-banner__txt{ white-space: normal; } /* permite salto en móvil */
   .hero-banner .btn-primario{ width: 100% !important; }
 }
+/* --- MÓVIL: que todo fluya y el banner sí se vea --- */
+@media (max-width: 520px) {
+  /* El contenedor del login deja de ser absolute */
+  #seccion-usuario{
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    width: 100%;
+    max-width: 420px;   /* opcional */
+    margin: 16px auto !important;
+    padding: 0 12px;
+  }
+
+  /* Asegura que #usuario no esconda nada */
+  #usuario{
+    overflow: visible !important;
+    min-height: auto;   /* evita recortes raros */
+  }
+
+  /* Banner responsive a ancho completo */
+  .login-hero,
+  .top-banner,
+  .hero-banner{
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100% !important;
+    max-width: 520px;
+    margin: 12px auto !important;
+    box-sizing: border-box;
+    padding: 10px 12px !important;
+  }
+
+  /* Texto del banner más legible en móvil */
+  #banner-txt{
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+  /* Botón ocupa todo el ancho en móvil */
+  #btn-probar-gratis{
+    width: 100% !important;
+  }
+}
+
+/* Por si algún z-index lo tapa (menús flotantes, etc.) */
+.login-hero, .top-banner, .hero-banner{
+  position: relative;
+  z-index: 5;
+}
