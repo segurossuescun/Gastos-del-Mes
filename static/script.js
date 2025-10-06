@@ -1357,95 +1357,111 @@ function showResetPasswordDialog(token) {
   });
 })();
 
-// REGISTRO (usa tu input de usuario + select dominio)
-(function wireRegistroForm(){
+// === REGISTRO (único, unificado y anti-doble-submit) ===
+(function wireRegistroFormUnico(){
   const form = document.getElementById('form-registro');
-  if (!form) { document.addEventListener('DOMContentLoaded', wireRegistroForm, { once:true }); return; }
+  if (!form) { document.addEventListener('DOMContentLoaded', wireRegistroFormUnico, { once:true }); return; }
 
-  form.addEventListener('submit', async (e) => {
+  // Evita agregar más de un listener
+  form.replaceWith(form.cloneNode(true));
+  const f = document.getElementById('form-registro');
+
+  f.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // anti-doble submit (por si el usuario hace doble click)
+    if (f.dataset.busy === '1') return;
+    f.dataset.busy = '1';
+    const release = () => { delete f.dataset.busy; };
+
+    // Toma de campos
     const nombre   = document.getElementById('registro-nombre')?.value?.trim() || "";
     const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
     const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
-    const password = document.getElementById('registro-password')?.value || "";
+    const pass1    = document.getElementById('registro-password')?.value || "";
     const pass2    = document.getElementById('registro-password2')?.value || "";
 
-    if (!usuario || !password) {
+    // Email final
+    const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
+
+    // Validaciones de cliente
+    if (!usuario || !pass1) {
+      release();
       Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
       return;
     }
-    if (password !== pass2) {
+    if (pass1 !== pass2) {
+      release();
       Swal.fire({ icon:'info', title:'Las contraseñas no coinciden' });
       return;
     }
-    const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
-
-    if (password.length < 6) {
-      Swal.fire({ icon:'info', title:'Contraseña muy corta', text:'Mínimo 6 caracteres.' });
+    // Mismo criterio que el backend: 8+, 1 mayúscula, 1 minúscula, 1 número (símbolos OPCIONALES)
+    const re = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/;
+    if (!re.test(pass1)) {
+      release();
+      Swal.fire({
+        icon:'info',
+        title:'Contraseña no válida',
+        text:'Mínimo 8 caracteres e incluye 1 mayúscula, 1 minúscula y 1 número.'
+      });
       return;
     }
 
+    // Llamada al backend
     try {
-      const res = await fetch('/registro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, password })
+      const res  = await fetch('/registro', {
+        method : 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body   : JSON.stringify({ nombre, email, password: pass1 })
       });
+
       const text = await res.text();
       let data = {};
       try { data = JSON.parse(text); } catch {}
 
-      if (!res.ok || data.ok === false) {
-        const msg = data?.error || `Error ${res.status}`;
-        Swal.fire({ icon:'error', title:'No pudimos registrar', text: msg });
-        return;
-      }
-
-      await Swal.fire({
-        icon: 'success',
-        title: '🎉 ¡Cuenta creada!',
-        text: 'Tu prueba gratuita ya comenzó.',
-        confirmButtonText: 'Continuar'
-      });
-
-      // ✅ Autologin tras registro → marca sesión y guarda usuario
-      if (typeof _marcarSesion === 'function') _marcarSesion(true);
-      else window.__sessionOK = true;
-
-      try {
-        sessionStorage.setItem('usuario', JSON.stringify({
-          id: data.id,
-          email: data.email,
-          nombre: data.nombre || data.email
-        }));
-      } catch {}
-
-      // Tras autologin del back:
-      await mostrarAppYcargar();
-
-      // Cierra/oculta secciones de registro/login y muestra la app
-      document.getElementById('seccion-login')?.classList.add('oculto');
-      document.getElementById('seccion-registro')?.classList.add('oculto');
-      document.getElementById('usuario')?.setAttribute('style','display:none;');
-
-      if (typeof ocultarSplash === 'function') {
-        ocultarSplash(() => {
-          document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
-          if (typeof enforceAuthView === 'function') enforceAuthView();
+      // ✅ Éxito SOLO si es 2xx y ok:true
+      if (res.ok && data?.ok === true) {
+        await Swal.fire({
+          icon:'success',
+          title:'🎉 ¡Cuenta creada!',
+          text :'Tu prueba gratuita ya comenzó.',
+          confirmButtonText:'Entrar'
         });
-      } else {
-        document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display = 'block');
+
+        // El backend ya creó la sesión → marca y entra
+        if (typeof _marcarSesion === 'function') _marcarSesion(true); else window.__sessionOK = true;
+        try {
+          sessionStorage.setItem('usuario', JSON.stringify({
+            id: data.id, email: data.email, nombre: data.nombre || data.email
+          }));
+        } catch {}
+
+        // Muestra la app y carga datos
+        await (window.mostrarAppYcargar?.() || Promise.resolve());
+
+        // Oculta vistas de registro/login
+        document.getElementById('seccion-login')?.classList.add('oculto');
+        document.getElementById('seccion-registro')?.classList.add('oculto');
+        document.getElementById('usuario')?.setAttribute('style','display:none;');
+        document.getElementById('zona-privada')?.style && (document.getElementById('zona-privada').style.display='block');
         if (typeof enforceAuthView === 'function') enforceAuthView();
+
+        f.reset();
+        release();
+        return; // 👈 importantísimo: no caer al bloque de error
       }
 
-      // Limpia el formulario de registro (por si queda en el DOM)
-      document.getElementById('form-registro')?.reset();
+      // ❌ Cualquier otra cosa es error
+      const msg = data?.error || `Error ${res.status}`;
+      release();
+      Swal.fire({ icon:'error', title:'No pudimos registrar', text: msg });
 
     } catch (err) {
       console.error('Registro error:', err);
+      release();
       Swal.fire({ icon:'error', title:'Ups', text:'Error inesperado creando la cuenta.' });
     }
-  });
+  }, { once:true });
 })();
 
 // Detecta ?reset_token=... en la URL y abre modal para cambiar la clave
@@ -3338,57 +3354,7 @@ async function cerrarSesion(e){
 
 window.cerrarSesion = cerrarSesion;
 
-// ✅ Registro (real, sin simulación)
-formRegistro.addEventListener("submit", async (e) => {
-  e.preventDefault();
 
-  const nombre = document.getElementById("registro-nombre").value.trim();
-  const usuario = usuarioInput.value.trim();
-  const contrasena = inputPassRegistro.value.trim();
-  const email = `${usuario}${dominioSelect.value}`.trim().toLowerCase();
-
-  // misma validación que ya tienes
-  const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,16}$/;
-  if (!regex.test(contrasena)) {
-    Swal.fire({
-      icon: 'error',
-      title: '❌ Contraseña inválida',
-      text: 'Debe tener mayúsculas, minúsculas, números y símbolos (8-16 caracteres).',
-      confirmButtonText: '👌 Entendido',
-    });
-    return;
-  }
-
-  try {
-    const resp = await fetch("/registro", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // OJO: el backend espera `password`, no `contrasena`
-      body: JSON.stringify({ nombre, email, password: contrasena })
-    });
-    const data = await resp.json().catch(() => ({}));
-
-    if (resp.ok && data.ok) {
-      // Backend hace auto-login → ya hay sesión
-      const usuarioSesion = { nombre: nombre || email, email };
-      sessionStorage.setItem("usuario", JSON.stringify(usuarioSesion));
-      mostrarZonaPrivada(usuarioSesion);
-      enforceAuthView();
-      formRegistro.reset();
-    } else {
-      Swal.fire({
-        icon: 'error',
-        title: 'No se pudo registrar',
-        text: data.error || 'Intenta con otro correo o revisa la contraseña.',
-      });
-    }
-  } catch (err) {
-    console.error("Error en registro:", err);
-    Swal.fire({ icon: 'error', title: 'Error de conexión' });
-  }
-});
-
-  // ✅ Login
 // ✅ Login
 formLogin.addEventListener("submit", async (e) => {
   e.preventDefault();

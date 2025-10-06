@@ -292,18 +292,32 @@ def require_active_subscription():
         return wrapper
     return deco
 
+import re
+from sqlalchemy.exc import IntegrityError
+
+# Reglas mínimas: 8+ caracteres, 1 mayúscula, 1 minúscula y 1 número
+PASSWORD_RE = re.compile(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$')
+
 @app.post("/registro")
 def registro():
     data = request.get_json(force=True, silent=True) or {}
     nombre   = (data.get("nombre") or "").strip()
     email    = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "").strip()
+
     if not email or not password:
         return jsonify({"ok": False, "error": "Faltan email o password"}), 400
 
+    # ✅ Validación de contraseña en servidor (impide crear si no cumple)
+    if not PASSWORD_RE.match(password):
+        return jsonify({
+            "ok": False,
+            "error": "La contraseña debe tener mínimo 8 caracteres, 1 mayúscula, 1 minúscula y 1 número."
+        }), 400
+
     try:
         with engine.begin() as conn:
-            # ¿existe?
+            # Pre-chequeo rápido (UX amable); la DB igual protege con UNIQUE/CITEXT
             exists = conn.execute(
                 text("SELECT 1 FROM users WHERE email = :email LIMIT 1"),
                 {"email": email}
@@ -313,33 +327,37 @@ def registro():
 
             pwd_hash = generate_password_hash(password)
 
-            # trial: comienza hoy y termina en TRIAL_DAYS
+            # Trial: hoy + TRIAL_DAYS
             now = datetime.now(timezone.utc)
             trial_end = now + timedelta(days=TRIAL_DAYS)
 
             row = conn.execute(
                 text("""
-                INSERT INTO users (name, email, password_hash, trial_started_at, trial_ends_at, plan, is_active)
-                VALUES (:name, :email, :pwd, :ts, :te, 'trial', true)
-                RETURNING id, email, name
+                    INSERT INTO users (name, email, password_hash, trial_started_at, trial_ends_at, plan, is_active)
+                    VALUES (:name, :email, :pwd, :ts, :te, 'trial', true)
+                    RETURNING id, email, name
                 """),
                 {
-                "name": nombre or email,
-                "email": email,
-                "pwd": pwd_hash,
-                "ts": now,
-                "te": trial_end,
+                    "name": nombre or email,
+                    "email": email,
+                    "pwd": pwd_hash,
+                    "ts": now,
+                    "te": trial_end,
                 }
             ).mappings().first()
 
-        # auto-login
+        # ✅ Solo si INSERT tuvo éxito: crear sesión
         session.clear()
         session["user_id"] = int(row["id"])
         session["email"]   = (row["email"] or "").lower()
 
-        return jsonify({"ok": True, "id": row["id"], "email": row["email"], "nombre": row["name"]})
-    except SQLAlchemyError as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": True, "id": row["id"], "email": row["email"], "nombre": row["name"]}), 201
+
+    except IntegrityError:
+        # Duplicado por email (CITEXT/UNIQUE) u otra violación de unicidad
+        return jsonify({"ok": False, "error": "El correo ya está registrado"}), 409
+    except SQLAlchemyError:
+        return jsonify({"ok": False, "error": "Error interno al registrar"}), 500
 
 @app.post("/login")
 def login():
