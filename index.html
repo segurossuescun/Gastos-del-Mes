@@ -481,8 +481,17 @@
   <div id="grafico-pagos-contenedor" class="grafico-contenedor flotante">
     <canvas id="grafico-pagos"></canvas>
   </div>
-
 </section>
+
+<!-- Rive -->
+<div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
+  <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
+  <div class="gift-hint">Haz clic para abrir ✨</div>
+</div>
+
+<!-- Rive SIEMPRE antes de tu JS -->
+<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
+<script src="/static/js/gift.js?v=1.0.8"></script>
 
     <!-- Registro -->
   <div id="usuario" class="vista">
@@ -597,11 +606,12 @@
   </div>
 </main>
 
+
 <!-- 1) Flags de entorno + versión -->
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
   window.__PROD__    = __LOCAL__ ? false : true;   // en hosting real quedará true
-  window.__VERSION__ = "1.0.4";                    // ⬅️ súbela en cada deploy
+  window.__VERSION__ = "1.0.5";                    // ⬅️ súbela en cada deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
@@ -615,12 +625,14 @@
 <!-- 3) Librerías de terceros -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
+  <script src="/static/js/gift.js"></script>
 
 <!-- 4) CSS primero -->
-<link rel="stylesheet" href="/static/style.css?v=1.0.3">
+<link rel="stylesheet" href="/static/style.css?v=1.0.5">
 
 <!-- 5) Tu app -->
-<script src="/static/script.js?v=1.0.4" defer></script>
+<script src="/static/script.js?v=1.0.5" defer></script>
 
 <!-- 6) Service Worker -->
 <script>
@@ -630,7 +642,7 @@
 
     window.addEventListener('load', () => {
       if (esProd) {
-        const v = encodeURIComponent(window.__VERSION__ || '1.0.4');
+        const v = encodeURIComponent(window.__VERSION__ || '1.0.5');
         navigator.serviceWorker.register(`/service-worker.js?v=${v}`)
           .then(reg => console.log('[SW] registrado:', reg.scope))
           .catch(err => console.error('[SW] error:', err));

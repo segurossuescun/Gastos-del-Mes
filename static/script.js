@@ -6069,3 +6069,172 @@ window.pintarTooltipCampana = pintarTooltipCampana;
     } catch {}
   });
 })();
+
+/* gift.js — sin ojito, zoom aparte y grandote 😎 */
+(function initGift(){
+  // ====== VERSION / RUTAS ======
+  const VER       = "1.0.8"; // para bust de caché
+  const PRE_SRC   = `/static/animaciones/caja_de_regalo_saltarina.riv?v=${VER}`;
+  const OPEN_SRC  = `/static/animaciones/caja_abierta.riv?v=${VER}`;
+  const ZOOM_SRC  = `/static/animaciones/tarjeta.riv?v=${VER}`; // archivo aparte
+  const ZOOM_ANIM = "solo tarjeta";          // nombre exacto dentro de tarjeta.riv
+
+  // Zoom grande (CSS y resolución interna para nitidez)
+  const ZOOM_CSS_W = 720;                    // px visibles (ajusta si quieres 800)
+  const DPR = Math.ceil(window.devicePixelRatio || 1);
+  const ZOOM_CANVAS_PX = Math.round(ZOOM_CSS_W * DPR);
+
+  // ====== DOM ======
+  const wrap = document.getElementById("gift1");
+  const hint = wrap?.querySelector(".gift-hint");
+  const preC = document.getElementById("gift1-pre");
+  if (!wrap || !preC) { console.warn("gift.js: falta #gift1 o #gift1-pre"); return; }
+
+  // ====== Layout ======
+  const layoutOpen = new rive.Layout({ fit: rive.Fit.Contain, alignment: rive.Alignment.Center });
+  const layoutZoom = new rive.Layout({ fit: rive.Fit.Cover,   alignment: rive.Alignment.Center });
+
+  // ====== Estado ======
+  let stage = "pre";                 // pre | open | zoom | frozen
+  let openPlayer = null;
+  let zoomPlayer = null;
+  let zoomCanvas = null;
+
+  // ====== PRE (loop) ======
+  const prePlayer = new rive.Rive({
+    src: PRE_SRC,
+    canvas: preC,
+    autoplay: true,
+    loop: true,
+    layout: layoutOpen
+  });
+
+  // ====== Crear OPEN (solo 1 vez) ======
+  function makeOpenPlayer(){
+    if (openPlayer) return openPlayer;
+
+    try { prePlayer.stop(); prePlayer.cleanup(); } catch(e){}
+    preC.remove();
+
+    const oc = document.createElement("canvas");
+    oc.id = "gift1-open";
+    oc.width = 500; oc.height = 500;
+    oc.style.background = "transparent";
+    oc.style.display = "block";
+    wrap.insertBefore(oc, hint || null);
+
+    // Doble clic directo = zoom
+    oc.addEventListener("dblclick", () => {
+      if (stage === "open") startZoom();
+    });
+
+    openPlayer = new rive.Rive({
+      src: OPEN_SRC,
+      canvas: oc,
+      autoplay: true,
+      loop: false,
+      layout: layoutOpen,
+      onLoad: () => {
+        try { openPlayer.play("Open"); } catch(e) { openPlayer.play(); }
+        stage = "open";
+      }
+    });
+
+    return openPlayer;
+  }
+
+  // ====== Utilidad reproducir por nombre o default ======
+  function playOne(player, names=[]){
+    for (const n of names){ try { player.play(n); return n; } catch(e){} }
+    try { player.play(); return "(default)"; } catch(e){ return null; }
+  }
+
+  // ====== ZOOM (usa tarjeta.riv y lo mostramos MÁS GRANDE) ======
+  function startZoom(){
+    // Oculta OPEN
+    const oc = document.getElementById("gift1-open");
+    if (oc) oc.style.display = "none";
+
+    // Agranda el contenedor por CSS
+    wrap.classList.add("zooming");
+
+    // Crea canvas de zoom si hace falta
+    if (!zoomCanvas){
+      zoomCanvas = document.createElement("canvas");
+      zoomCanvas.id = "gift1-zoom";
+      // resolución interna alta (nitidez)
+      zoomCanvas.width  = ZOOM_CANVAS_PX;
+      zoomCanvas.height = ZOOM_CANVAS_PX;
+      // tamaño visual
+      zoomCanvas.style.maxWidth  = ZOOM_CSS_W + "px";
+      zoomCanvas.style.width     = "100%";
+      zoomCanvas.style.height    = "auto";
+      zoomCanvas.style.background= "transparent";
+      zoomCanvas.style.display   = "block";
+      wrap.insertBefore(zoomCanvas, hint || null);
+    }
+
+    // Crea el player si hace falta
+    if (!zoomPlayer){
+      zoomPlayer = new rive.Rive({
+        src: ZOOM_SRC,
+        canvas: zoomCanvas,
+        autoplay: false,
+        loop: false,
+        layout: layoutZoom,           // llena más que Contain
+        onLoad: () => {
+          try { zoomPlayer.play(ZOOM_ANIM); } catch(e){ zoomPlayer.play(); }
+          stage = "zoom";
+        }
+      });
+
+      // Congela al terminar "solo tarjeta"
+      zoomPlayer.on('loop', (ev)=>{
+        const name = (ev?.animationName||"").trim().toLowerCase();
+        if (name === ZOOM_ANIM.toLowerCase() && stage !== "frozen") {
+          try { zoomPlayer.pause(); } catch(e){}
+          stage = "frozen";
+        }
+      });
+    } else {
+      try { zoomPlayer.reset(); } catch(e){}
+      try { zoomPlayer.play(ZOOM_ANIM); } catch(e){ zoomPlayer.play(); }
+      stage = "zoom";
+    }
+  }
+
+  // ====== Reanudar desde congelado → volver a OPEN ======
+  function resumeFromFrozen(){
+    // Limpia zoom si existe
+    if (zoomCanvas){ zoomCanvas.remove(); zoomCanvas = null; }
+    if (zoomPlayer){ try{ zoomPlayer.cleanup(); }catch(e){} zoomPlayer = null; }
+
+    // Quita tamaño extra
+    wrap.classList.remove("zooming");
+
+    // Muestra OPEN otra vez
+    const oc = document.getElementById("gift1-open");
+    if (oc) oc.style.display = "block";
+
+    if (!openPlayer) return;
+    try { openPlayer.reset(); } catch(e){}
+    playOne(openPlayer, ["Open","Default","Animation 1"]);
+    stage = "open";
+  }
+
+  // ====== Interacciones ======
+  // Clic simple: abrir o reanudar
+  wrap.addEventListener("click", () => {
+    if (stage === "pre"){ makeOpenPlayer(); return; }
+    if (stage === "frozen"){ resumeFromFrozen(); return; }
+    // en "open"/"zoom": usa DOBLE clic para activar zoom
+  });
+})();
+document.addEventListener('focusin', e => {
+  if (e.target.matches('input, textarea, [contenteditable="true"]'))
+    document.body.classList.add('hide-anim-on-input');
+});
+document.addEventListener('focusout', e => {
+  if (e.target.matches('input, textarea, [contenteditable="true"]'))
+    document.body.classList.remove('hide-anim-on-input');
+});

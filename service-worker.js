@@ -1,4 +1,4 @@
-const APP_VER   = "1.0.4";                 // súbelo en cada release
+const APP_VER   = "1.0.5";                 // súbelo en cada release
 const CACHE_NAME = `gdm-${APP_VER}`;
 
 const PRECACHE = [

@@ -1,24 +1,24 @@
-# Ignorar el entorno virtual
-venv/
-
-# Ignorar los archivos compilados de Python
+# Python / entorno
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
+instance/
+.env
+venv/
+.venv/
 
-# Ignorar archivos de logs (opcional)
+# Node / build
+node_modules/
+dist/
+build/
+
+# Editores / SO
+.DS_Store
 *.log
-
-# Ignorar configuraciones locales de IDEs/editors (opcional)
 .vscode/
 .idea/
 
-# Ignorar archivos de sistema (Windows/macOS)
-.DS_Store
-Thumbs.db
-
-# Ignorar variables de entorno
-.env
+# Caches varias
+*.cache
+*.tmp
 
 h
