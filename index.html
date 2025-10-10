@@ -483,15 +483,28 @@
   </div>
 </section>
 
-<!-- Rive -->
-<div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
-  <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
-  <div class="gift-hint">Haz clic para abrir ✨</div>
-</div>
+<!-- QR y Regalo -->
+<section id="regalo" class="regalo-wrap">
+  <figure class="qr-box">
+  <img
+    src="/static/QR/AppGastosdelMes.png?v=3"
+    alt="QR App Gastos del Mes"
+    width="260" height="260"
+  />
+</figure>
+
+  <!-- Rive -->
+  <div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
+    <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
+  </div>
+</section>
 
 <!-- Rive SIEMPRE antes de tu JS -->
 <script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
-<script src="/static/js/gift.js?v=1.0.8"></script>
+
+<script src="{{ url_for('static', filename='js/gift.js') }}?v=1.0.8" defer></script>
+<script src="{{ url_for('static', filename='js/regalo.js') }}?v=1.0.8" defer></script>
+
 
     <!-- Registro -->
   <div id="usuario" class="vista">
@@ -596,7 +609,6 @@
       <div id="zona-privada" style="display:none;">
         <h4>🎉 Bienvenido, <span id="usuario-nombre"></span></h4>
       </div>
-  </div>
 </div>
 
 <div id="mini-disponible-overlay" class="mini-disp-overlay" hidden>
@@ -604,14 +616,15 @@
     <button class="mini-disp-close" aria-label="Cerrar">✕</button>
     <div id="mini-disponible-content">Cargando…</div>
   </div>
+</div>
 </main>
 
 
 <!-- 1) Flags de entorno + versión -->
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
-  window.__PROD__    = __LOCAL__ ? false : true;   // en hosting real quedará true
-  window.__VERSION__ = "1.0.5";                    // ⬅️ súbela en cada deploy
+  window.__PROD__    = !__LOCAL__;
+  window.__VERSION__ = "1.0.8";   // ⬅️ SOLO aquí cambias en cada deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
@@ -629,25 +642,22 @@
   <script src="/static/js/gift.js"></script>
 
 <!-- 4) CSS primero -->
-<link rel="stylesheet" href="/static/style.css?v=1.0.5">
+<link rel="stylesheet" href="/static/style.css?v=1.0.8">
 
-<!-- 5) Tu app -->
-<script src="/static/script.js?v=1.0.5" defer></script>
+<script src="https://unpkg.com/@rive-app/canvas@2.9.1" defer></script>
+<script src="/static/js/gift.js?v=1.0.8" defer></script>
+<script src="/static/script.js?v=1.0.8" defer></script>
 
-<!-- 6) Service Worker -->
+<!-- Service Worker: pasa la versión en la URL -->
 <script>
   if ('serviceWorker' in navigator) {
-    const esLocal = ['localhost','127.0.0.1'].includes(location.hostname);
-    const esProd  = !esLocal && (window.__PROD__ === true);
-
     window.addEventListener('load', () => {
-      if (esProd) {
-        const v = encodeURIComponent(window.__VERSION__ || '1.0.5');
+      if (window.__PROD__) {
+        const v = encodeURIComponent(window.__VERSION__);
         navigator.serviceWorker.register(`/service-worker.js?v=${v}`)
-          .then(reg => console.log('[SW] registrado:', reg.scope))
+          .then(reg => { console.log('[SW] registrado', reg.scope); reg.update(); })
           .catch(err => console.error('[SW] error:', err));
       } else {
-        // DEV: limpia cualquier SW/caché previo
         navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
         caches?.keys?.().then(keys => keys.forEach(k => caches.delete(k)));
         console.log('[SW] DEV: sin service worker (unregistered + caches cleared)');
@@ -655,6 +665,7 @@
     });
   }
 </script>
+
 <script>
   (function handleCheckoutReturnVerified(){
     const url = new URL(window.location.href);

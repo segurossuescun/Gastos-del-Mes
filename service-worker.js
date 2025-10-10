@@ -1,72 +1,85 @@
-const APP_VER   = "1.0.5";                 // súbelo en cada release
+// === SW con versión por query y caché por release ===
+const APP_VER   = new URL(self.location).searchParams.get('v') || 'dev';
 const CACHE_NAME = `gdm-${APP_VER}`;
 
 const PRECACHE = [
-  "/", "/index.html",
+  '/', '/index.html',
   `/static/script.js?v=${APP_VER}`,
   `/static/style.css?v=${APP_VER}`,
-  "/static/manifest.json",
-  "/static/icons/favicon.png",
-  "/static/icons/gasto192.png",
-  "/static/icons/gasto512.png",
-  "/static/fondos/logo.png"
+  '/static/manifest.json',
+  '/static/icons/favicon.png',
+  '/static/icons/gasto192.png',
+  '/static/icons/gasto512.png',
+  '/static/fondos/logo.png'
 ];
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(PRECACHE)));
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(c => c.addAll(PRECACHE))
+  );
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter(k => k.startsWith('gdm-') && k !== CACHE_NAME)
+        .map(k => caches.delete(k))
+    );
+    await self.clients.claim();
+  })());
 });
 
-self.addEventListener("fetch", (event) => {
+self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;
+  if (req.method !== 'GET') return;
 
-  // Navegaciones: red primero, fallback a index cacheado
-  if (req.mode === "navigate") {
-    event.respondWith(fetch(req).catch(() => caches.match("/index.html")));
+  // Navegaciones: red primero; si falla, vuelve al index cacheado
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).catch(() => caches.match('/index.html', { ignoreSearch: true }))
+    );
     return;
   }
 
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  // ✅ Network-first para los críticos (evita 1 carga "stale" tras deploy)
-  const isCritical =
-    url.pathname === "/static/script.js" || url.pathname === "/static/style.css";
-  if (isCritical) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, clone));
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
+  const isCritico =
+    url.pathname === '/static/script.js' ||
+    url.pathname === '/static/style.css';
+
+  // JS/CSS críticos: Network-first (para no servir "stale" tras deploy)
+  if (isCritico) {
+    event.respondWith((async () => {
+      try {
+        const net = await fetch(req);
+        const clone = net.clone();
+        event.waitUntil(caches.open(CACHE_NAME).then(c => c.put(req, clone)));
+        return net;
+      } catch (e) {
+        const cached = await caches.match(req, { ignoreSearch: true });
+        if (cached) return cached;
+        throw e;
+      }
+    })());
     return;
   }
 
-  // Resto de estáticos: stale-while-revalidate
-  if (url.pathname.startsWith("/static/")) {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        const refresh = fetch(req)
-          .then((res) => {
-            caches.open(CACHE_NAME).then((c) => c.put(req, res.clone()));
-            return res;
-          })
-          .catch(() => cached);
-        return cached || refresh;
-      })
-    );
+  // Otros /static: Stale-while-revalidate
+  if (url.pathname.startsWith('/static/')) {
+    event.respondWith((async () => {
+      const cached = await caches.match(req, { ignoreSearch: true });
+      const refresh = fetch(req)
+        .then(res => {
+          const clone = res.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then(c => c.put(req, clone)));
+          return res;
+        })
+        .catch(() => cached);
+      return cached || refresh;
+    })());
   }
 });
