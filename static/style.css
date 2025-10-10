@@ -2262,137 +2262,98 @@ body.state-logout #seccion-login { display: block !important; }
   position: relative;
   z-index: 5;
 }
-/* Marco invisible (no empuja el layout) */
-/* ===== BASE anti-corrimiento ===== */
-html, body{ margin:0; padding:0; }
-html, body{ overflow-x: hidden; }   /* evita scroll horizontal por sombras/bordes */
 
-/* ===== CONTENEDOR CENTRADO DE LA SECCIÓN ===== */
-/* --- REGALO fijo (ok) --- */
-.gift-anim{
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  width: 480px;
-  max-width: 38vw;
-  z-index: 9999;
-  background: transparent;
-  text-align: center;
-  pointer-events: none;
-  contain: layout paint;
-}
-.gift-anim canvas{
-  width:100%;
-  max-width:480px;
-  height:auto;
-  aspect-ratio:1/1;
-  display:block;
-  margin:0 auto;
-  cursor:pointer;
-  pointer-events:auto;
-}
-.gift-anim.zooming{ width:720px; max-width:48vw; }
-.gift-anim.zooming canvas{ max-width:720px; }
-@media (max-width:900px){
-  .gift-anim{
-    top:auto; right:auto; left:50%;
-    bottom:max(12px, env(safe-area-inset-bottom));
-    transform:translateX(-50%);
-    width:min(92vw,480px);
-    max-width:92vw;
-  }
-  .gift-anim.zooming{ width:min(96vw,720px); max-width:96vw; }
-  .hide-anim-on-input .gift-anim{ opacity:0; pointer-events:none; transition:opacity .15s; }
-}
+/* ===== Base ===== */
+html, body{ margin:0; padding:0; overflow-x:hidden; }
 
-/* --- HIGHLIGHT temporal --- */
-#regalo .gift-anim.highlight{
-  outline:4px solid #553071;
-  outline-offset:6px;
-  box-shadow:0 0 0 6px #cdb8e4, 0 0 18px #553071;
-  border-radius:24px;
-  animation:gift-pulse 1.2s ease-in-out 2;
-}
-@keyframes gift-pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+/* =======================================
+   ESCRITORIO (>=901px) — layout fijo
+   ======================================= */
+@media (min-width: 901px){
 
-/* --- QR fijo que NO molesta --- */
-:root{ --qr-size:140px; --side-gap:20px; }
-.qr-box{
-  position:fixed;
-  left:var(--side-gap);
-  top:var(--side-gap);        /* pon 100px si lo quieres más abajo */
-  width:var(--qr-size);
-  z-index:10001;
-  pointer-events:none;        /* no bloquea inputs */
-}
-.qr-box img{ display:block; width:100%; height:auto; border-radius:12px; }
-@media (max-width:900px){
-  .qr-box{ position:static; pointer-events:auto; margin:12px auto 0; width:var(--qr-size); }
-}
+  .login-stack{ max-width:1100px; margin:0 auto; }
 
-/* --- Anti scroll lateral por sombras/bordes fijos --- */
-html, body{ overflow-x:hidden; }
-/* Alinear QR con el regalo: ambos centrados verticalmente */
-
-:root{
-  --qr-size: 140px;
-  --qr-left: 128px;          /* si quieres moverlo más a la derecha, súbelo */
-  --qr-shift-down: -125px;     /* cuánto bajarlo: 12px, 24px, 36px… */
-}
-
-.qr-box{
-  position: fixed;
-  left: var(--qr-left) !important;
-  top: calc(50vh - var(--qr-size) / 2 + var(--qr-shift-down)) !important;
-  width: var(--qr-size);
-  z-index: 10001;
-  pointer-events: none;
-}
-
-/* móvil igual que antes */
-@media (max-width: 900px){
+  /* QR fijo a la izquierda (centro vertical) */
   .qr-box{
-    position: static !important;
-    left: auto !important;
-    top: auto !important;
-    pointer-events: auto;
-    margin: 12px auto 0;
-    width: var(--qr-size);
+    --qr-size:140px; --qr-left:128px; --qr-shift-down:-125px;
+    position:fixed;
+    left:var(--qr-left);
+    top:calc(50vh - var(--qr-size)/2 + var(--qr-shift-down));
+    width:var(--qr-size);
+    z-index:1001;
   }
-}
-/* ===== Gift posición mobile (arriba/abajo centrado) ===== */
-@media (max-width: 900px){
+  .qr-box img{ display:block; width:100%; height:auto; border-radius:12px; }
+
+  /* Regalo fijo arriba derecha */
   .gift-anim{
-    position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(92vw, 420px);
-    max-width: 92vw;
-    z-index: 9999;
-    /* por defecto ABAJO */
-    bottom: max(12px, env(safe-area-inset-bottom));
-    top: auto;
+    position:fixed;
+    top:20px; right:20px;
+    width:480px; max-width:38vw;
+    z-index:999;
+    background:transparent;
+    text-align:center;
+    pointer-events:none; /* el canvas sí recibe */
+    contain:layout paint;
   }
-  /* Si quieres ARRIBA, añade la clase gift--top en el HTML (#gift1) */
-  .gift-anim.gift--top{
-    top: max(12px, env(safe-area-inset-top));
-    bottom: auto;
+  .gift-anim canvas{
+    width:100%; height:auto; aspect-ratio:1/1;
+    display:block; margin:0 auto; pointer-events:auto;
+  }
+  .gift-anim.zooming{ width:720px; max-width:48vw; }
+  .gift-anim.zooming canvas{ max-width:720px; }
+
+  /* El formulario centrado y con aire para que no choque */
+  #usuario .form-container{
+    width:min(640px, 90vw);
+    margin:0 auto;
+    padding:0 8px;
   }
 }
-:root{ --qr-size: 140px; }
 
-/* Desktop: donde lo tengas ahora… (no tocamos) */
-
-/* Mobile: apilado arriba del contenido, sin superponerse */
+/* =======================================
+   MÓVIL (<=900px) — apilado compacto
+   ======================================= */
 @media (max-width: 900px){
-  .qr-box{
-    position: static !important;   /* deja de ser fixed */
-    width: var(--qr-size);
-    margin: 12px auto 0;           /* centrado arriba */
-    z-index: auto;
-    pointer-events: auto;
+
+  /* Columna compacta */
+  .login-stack{
+    display:flex; flex-direction:column; align-items:center;
+    gap:12px; max-width:560px; margin:0 auto; padding:0 14px;
   }
-  .qr-box img{
-    display: block; width: 100%; height: auto; border-radius: 12px;
+
+  /* QR arriba, centrado, sin fixed ni márgenes gigantes */
+  .login-stack .qr-box{
+    position:static !important;
+    width:120px !important;
+    margin:12px auto 4px !important;
+    left:auto !important; right:auto !important;
+    top:auto !important; bottom:auto !important;
+    transform:none !important; z-index:1 !important;
+    pointer-events:auto !important;
+  }
+  .login-stack .qr-box img{ width:100%; height:auto; border-radius:12px; }
+
+  /* Form a lo ancho del stack */
+  .login-stack #usuario .form-container{ width:100%; max-width:560px; }
+
+  /* Regalo debajo del form, centrado y sin fixed */
+  .login-stack #gift1.gift-anim{
+    position:static !important;
+    margin:8px auto 20px !important;
+    width:min(92vw, 380px) !important;   /* más compacto que antes */
+    max-width:92vw !important;
+    transform:none !important;
+    text-align:center !important;
+    pointer-events:auto !important;
+    z-index:1 !important;
+    display:block !important;
+  }
+  .login-stack #gift1.gift-anim canvas{
+    width:100% !important; height:auto !important; aspect-ratio:1/1;
+  }
+
+  /* Cuando se escribe, ocultar anim para no tapar campos (opcional) */
+  .hide-anim-on-input .gift-anim{
+    opacity:0; pointer-events:none; transition:opacity .15s ease;
   }
 }

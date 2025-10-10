@@ -4,7 +4,7 @@
   <link rel="preload" as="image" href="/static/fondos/logo.png">
 
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gastos del Mes</title>
 
   <!-- PWA / Iconos -->
@@ -483,6 +483,7 @@
   </div>
 </section>
 
+<div class="login-stack safe-center">
 <!-- QR y Regalo -->
 <section id="regalo" class="regalo-wrap">
   <figure class="qr-box">
@@ -492,19 +493,6 @@
     width="260" height="260"
   />
 </figure>
-
-  <!-- Rive -->
-  <div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
-    <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
-  </div>
-</section>
-
-<!-- Rive SIEMPRE antes de tu JS -->
-<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
-
-<script src="{{ url_for('static', filename='js/gift.js') }}?v=1.0.8" defer></script>
-<script src="{{ url_for('static', filename='js/regalo.js') }}?v=1.0.8" defer></script>
-
 
     <!-- Registro -->
   <div id="usuario" class="vista">
@@ -616,6 +604,19 @@
     <button class="mini-disp-close" aria-label="Cerrar">✕</button>
     <div id="mini-disponible-content">Cargando…</div>
   </div>
+</div>
+ <!-- Rive -->
+  <div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
+    <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
+  </div>
+</section>
+
+<!-- Rive SIEMPRE antes de tu JS -->
+<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
+
+<script src="{{ url_for('static', filename='js/gift.js') }}?v=1.0.8" defer></script>
+<script src="{{ url_for('static', filename='js/regalo.js') }}?v=1.0.8" defer></script>
+
 </div>
 </main>
 

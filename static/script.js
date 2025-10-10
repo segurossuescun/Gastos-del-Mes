@@ -6202,6 +6202,8 @@ window.pintarTooltipCampana = pintarTooltipCampana;
       stage = "zoom";
     }
   }
+// al final de la función startZoom()
+window.__giftStartZoom = startZoom;
 
   // ====== Reanudar desde congelado → volver a OPEN ======
   function resumeFromFrozen(){
@@ -6279,3 +6281,43 @@ document.addEventListener('focusout', e => {
   const mo = new MutationObserver(bindTap);
   mo.observe(wrap, { childList: true, subtree: true });
 })();
+
+document.addEventListener('DOMContentLoaded', () => {
+  // 1) Marca móvil si <=900px
+  (function mobileClass(){
+    const mql = window.matchMedia('(max-width: 900px)');
+    function apply(){ document.body.classList.toggle('mobile-stack', mql.matches); }
+    apply();
+    try { mql.addEventListener('change', apply); } catch { mql.addListener(apply); }
+  })();
+
+  // 2) Doble-tap para zoom en móvil
+  (function setupGiftDoubleTap(){
+    const wrap = document.getElementById('gift1');
+    if (!wrap) return;
+    let last = 0;
+
+    function startZoomSafe(){
+      if (typeof window.__giftStartZoom === 'function') return window.__giftStartZoom();
+      if (typeof window.startZoom === 'function') return window.startZoom();
+      const c = document.getElementById('gift1-open') || document.getElementById('gift1-pre');
+      if (c) c.dispatchEvent(new MouseEvent('dblclick', { bubbles:true }));
+    }
+    function currentCanvas(){
+      return document.getElementById('gift1-zoom')
+          || document.getElementById('gift1-open')
+          || document.getElementById('gift1-pre');
+    }
+    function bind(){
+      const c = currentCanvas();
+      if (!c) return;
+      c.addEventListener('touchstart', (ev) => {
+        const now = Date.now();
+        if (now - last < 280) { ev.preventDefault(); startZoomSafe(); }
+        last = now;
+      }, { passive:false });
+    }
+    bind();
+    new MutationObserver(bind).observe(wrap, { childList:true, subtree:true });
+  })();
+});
