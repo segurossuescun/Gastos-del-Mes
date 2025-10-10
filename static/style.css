@@ -2360,4 +2360,39 @@ html, body{ overflow-x:hidden; }
     width: var(--qr-size);
   }
 }
+/* ===== Gift posición mobile (arriba/abajo centrado) ===== */
+@media (max-width: 900px){
+  .gift-anim{
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(92vw, 420px);
+    max-width: 92vw;
+    z-index: 9999;
+    /* por defecto ABAJO */
+    bottom: max(12px, env(safe-area-inset-bottom));
+    top: auto;
+  }
+  /* Si quieres ARRIBA, añade la clase gift--top en el HTML (#gift1) */
+  .gift-anim.gift--top{
+    top: max(12px, env(safe-area-inset-top));
+    bottom: auto;
+  }
+}
+:root{ --qr-size: 140px; }
 
+/* Desktop: donde lo tengas ahora… (no tocamos) */
+
+/* Mobile: apilado arriba del contenido, sin superponerse */
+@media (max-width: 900px){
+  .qr-box{
+    position: static !important;   /* deja de ser fixed */
+    width: var(--qr-size);
+    margin: 12px auto 0;           /* centrado arriba */
+    z-index: auto;
+    pointer-events: auto;
+  }
+  .qr-box img{
+    display: block; width: 100%; height: auto; border-radius: 12px;
+  }
+}

@@ -6238,3 +6238,44 @@ document.addEventListener('focusout', e => {
   if (e.target.matches('input, textarea, [contenteditable="true"]'))
     document.body.classList.remove('hide-anim-on-input');
 });
+// === Touch: doble-tap para hacer ZOOM ===
+(function setupGiftDoubleTap(){
+  const wrap = document.getElementById('gift1');
+  if (!wrap) return;
+
+  let lastTap = 0;
+  function isTouch(){ return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
+
+  // devuelve el canvas visible (pre u open)
+  function currentCanvas(){
+    return document.getElementById('gift1-zoom')
+        || document.getElementById('gift1-open')
+        || document.getElementById('gift1-pre');
+  }
+
+  // el zoom lo dispara gift.js con startZoom(); lo exponemos si no está global:
+  window.__giftStartZoom = window.__giftStartZoom || (typeof startZoom === 'function' ? startZoom : null);
+
+  // Escucha taps sobre el canvas actual
+  function bindTap(){
+    const c = currentCanvas();
+    if (!c || !isTouch()) return;
+    c.addEventListener('touchstart', (ev) => {
+      const now = Date.now();
+      const delta = now - lastTap;
+      lastTap = now;
+
+      // tap simple: deja que tu click normal haga "abrir" (pre -> open)
+      // doble-tap (<300ms): dispara zoom si está la función disponible
+      if (delta < 300 && window.__giftStartZoom) {
+        ev.preventDefault();
+        try { window.__giftStartZoom(); } catch(e){}
+      }
+    }, { passive: false });
+  }
+
+  // al cargar y cada vez que cambie el canvas, re-enlazamos
+  bindTap();
+  const mo = new MutationObserver(bindTap);
+  mo.observe(wrap, { childList: true, subtree: true });
+})();
