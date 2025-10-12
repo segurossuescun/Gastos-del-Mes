@@ -694,167 +694,6 @@ body:not(.is-loading) #contenido-app{
 }
 
 /* ================================
-   LOGIN Y REGISTRO DE USUARIOS
-================================ */
-
-#usuario {
-  position: relative;
-  min-height: calc(100vh - 200px); /* ajusta 200px si tienes header arriba */
-}
-
-#seccion-usuario {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-}
-
-#seccion-registro,
-#seccion-login {
-  max-width: 350px;
-  min-width: 280px;
-  text-align: center;
-}
-
-#usuario h3 {
-  font-family: 'Cookie', cursive;
-  font-size: 60px;
-  color: #553071;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-#usuario h4 {
-  font-family: Arial, sans-serif;
-  font-size: 20px;
-  color: #8b68b0;
-  margin-top: 20px;
-  margin-bottom: 10px;
-  text-align: center;
-  position: relative;
-}
-
-#usuario h4::before {
-  content: "✨ ";
-  font-size: 18px;
-}
-
-#usuario label {
-  font-family: Arial, sans-serif;
-  font-size: 14px;
-}
-
-#usuario small {
-  font-family: Arial, sans-serif;
-  font-size: 12px;
-  color: #553071;
-  display: block;
-  margin-top: 4px;
-  line-height: 1.4;
-  text-align: center;
-}
-
-#seccion-registro form,
-#seccion-login form {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-#seccion-registro form input,
-#seccion-login form input,
-#seccion-registro form select,
-#seccion-login form select,
-#seccion-registro form button,
-#seccion-login form button {
-  font-family: Arial, sans-serif;
-  margin: 5px 0;
-  padding: 8px;
-  width: 100%;
-  box-sizing: border-box;
-  font-size: 14px;
-}
-
-#seccion-usuario .input-con-ojo {
-  position: relative;
-  width: 100%;
-}
-
-#seccion-usuario .input-con-ojo input {
-  padding-right: 40px;
-}
-
-#seccion-usuario .boton-ojo {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  cursor: pointer;
-  font-size: 1.2rem;
-}
-
-/* Correo */
-.correo-container {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  margin-bottom: 10px;
-}
-
-.correo-container input,
-.correo-container select {
-  padding: 8px;
-  font-size: 14px;
-  height: 38px;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  transition: all 0.2s ease-in-out;
-}
-
-.correo-container input {
-  flex: 2;
-}
-
-.correo-container select {
-  flex: 1;
-  min-width: 100px;
-}
-
-/* Efectos focus/hover */
-.correo-container input:focus,
-.correo-container select:focus {
-  border-color: #8b68b0;
-  box-shadow: 0 0 5px rgba(139, 104, 176, 0.4);
-  outline: none;
-}
-
-.correo-container input:hover,
-.correo-container select:hover {
-  border-color: #a88ac3;
-}
-
-input:focus,
-select:focus {
-  outline: none;
-  border: 2px solid #6d4b96;
-  box-shadow: 0 0 5px #6d4b96;
-}
-
-input:hover,
-select:hover {
-  border-color: #6d4b96;
-}
-
-.swal2-popup .swal2-html-container,
-.swal2-popup .swal2-title {
-  font-family: Arial, sans-serif !important;
-  font-size: 12px !important;
-}
-
-/* ================================
    CONFIGURACIÓN (MODAL)
 ================================ */
 .modal-overlay {
@@ -2266,143 +2105,160 @@ body.state-logout #seccion-login { display: block !important; }
 /* ===== Base ===== */
 html, body{ margin:0; padding:0; overflow-x:hidden; }
 
-/* =======================================
-   ESCRITORIO (>=901px) — layout fijo
-   ======================================= */
-@media (min-width: 901px){
+/* =========================================
+   LOGIN / REGISTRO — LAYOUT CANÓNICO ÚNICO
+========================================= */
 
-  .login-stack{ max-width:1100px; margin:0 auto; }
-
-  /* QR fijo a la izquierda (centro vertical) */
-  .qr-box{
-    --qr-size:140px; --qr-left:128px; --qr-shift-down:-125px;
-    position:fixed;
-    left:var(--qr-left);
-    top:calc(50vh - var(--qr-size)/2 + var(--qr-shift-down));
-    width:var(--qr-size);
-    z-index:1001;
-  }
-  .qr-box img{ display:block; width:100%; height:auto; border-radius:12px; }
-
-  /* Regalo fijo arriba derecha */
-  .gift-anim{
-    position:fixed;
-    top:20px; right:20px;
-    width:480px; max-width:38vw;
-    z-index:999;
-    background:transparent;
-    text-align:center;
-    pointer-events:none; /* el canvas sí recibe */
-    contain:layout paint;
-  }
-  .gift-anim canvas{
-    width:100%; height:auto; aspect-ratio:1/1;
-    display:block; margin:0 auto; pointer-events:auto;
-  }
-  .gift-anim.zooming{ width:720px; max-width:48vw; }
-  .gift-anim.zooming canvas{ max-width:720px; }
-
-  /* El formulario centrado y con aire para que no choque */
-  #usuario .form-container{
-    width:min(640px, 90vw);
-    margin:0 auto;
-    padding:0 8px;
-  }
+/* —— BASE —— */
+#usuario{
+  position:relative;
+  display:flex;
+  justify-content:center;
+}
+#seccion-usuario{
+  position:static !important;
+  top:auto !important;
+  left:auto !important;
+  transform:none !important;
+  width:100%;
+  max-width:700px;
+  margin:0 auto;
+  padding:0 12px;
+  text-align:center;
+}
+#seccion-registro,#seccion-login{
+  max-width:560px;
+  min-width:280px;
+  margin:0 auto;
 }
 
-/* =======================================
-   MÓVIL (<=900px) — apilado compacto
-   ======================================= */
-@media (max-width: 900px){
-
-  /* Columna compacta */
-  .login-stack{
-    display:flex; flex-direction:column; align-items:center;
-    gap:12px; max-width:560px; margin:0 auto; padding:0 14px;
-  }
-
-  /* QR arriba, centrado, sin fixed ni márgenes gigantes */
-  .login-stack .qr-box{
-    position:static !important;
-    width:120px !important;
-    margin:12px auto 4px !important;
-    left:auto !important; right:auto !important;
-    top:auto !important; bottom:auto !important;
-    transform:none !important; z-index:1 !important;
-    pointer-events:auto !important;
-  }
-  .login-stack .qr-box img{ width:100%; height:auto; border-radius:12px; }
-
-  /* Form a lo ancho del stack */
-  .login-stack #usuario .form-container{ width:100%; max-width:560px; }
-
-  /* Regalo debajo del form, centrado y sin fixed */
-  .login-stack #gift1.gift-anim{
-    position:static !important;
-    margin:8px auto 20px !important;
-    width:min(92vw, 380px) !important;   /* más compacto que antes */
-    max-width:92vw !important;
-    transform:none !important;
-    text-align:center !important;
-    pointer-events:auto !important;
-    z-index:1 !important;
-    display:block !important;
-  }
-  .login-stack #gift1.gift-anim canvas{
-    width:100% !important; height:auto !important; aspect-ratio:1/1;
-  }
-
-  /* Cuando se escribe, ocultar anim para no tapar campos (opcional) */
-  .hide-anim-on-input .gift-anim{
-    opacity:0; pointer-events:none; transition:opacity .15s ease;
-  }
+/* QR sin deformación */
+.qr-box{ text-align:center; }
+.qr-box,
+.qr-box img{ height:auto !important; }
+.qr-box img{
+  display:block;
+  width:100%;
+  max-width:100%;
+  object-fit:contain;
+  border-radius:12px;
 }
-/* Ocultar decoraciones cuando estoy dentro de la app */
-.in-app .qr-box,
-.in-app #gift1 { display:none !important; }
-/* Área que se puede hacer zoom/pan cuando estás dentro */
-.in-app #contenido-app{
-  touch-action: none;          /* habilita gestures con Pointer Events */
-  transform-origin: 0 0;       /* los cálculos serán desde la esquina sup-izq */
-  will-change: transform;
-}
-/* Desktop */
-@media (min-width: 901px){
-  .qr-caption{
-    margin-top:8px;
-    font-size:14px;
-    color:#553071;
-    text-align:center;
-    background:#ffffffcc;
-    backdrop-filter: blur(2px);
-    padding:4px 8px;
-    border-radius:8px;
-  }
-}
-
-/* Móvil: centrado y compacto */
-@media (max-width: 900px){
-  .login-stack .qr-box{ position:static !important; width:120px !important; margin:12px auto 4px !important; }
-  .login-stack .qr-caption{
-    margin-top:6px;
-    font-size:13px;
-    color:#553071;
-    text-align:center;
-  }
-}
-
-/* Dentro de la app se oculta todo el bloque QR (caption incluido) */
-.in-app .qr-box{ display:none !important; }
-/* al final de tu CSS */
 .qr-box .qr-caption{
-  color:#553071 !important;     /* moradito */
-  text-align:center !important; /* centrado */
+  color:#553071;
   font-weight:600;
-  margin-top:8px;
   line-height:1.25;
-}
-.qr-caption .qr-ico{      /* si usas el SVG del teléfono */
-  vertical-align:-2px;
-  margin-right:6px;
+  margin-top:6px;
+  font-size:13px;
 }
 
+/* Regalo (canvas) */
+#gift1.gift-anim canvas{
+  width:100%;
+  height:auto;
+  aspect-ratio:1/1;
+}
+
+/* Ocultar QR/Regalo dentro de la app (post-login) */
+.in-app .qr-box,
+.in-app #gift1{ display:none !important; }
+
+/* =========================================
+   < 1200px — Apilado: QR → Form → Regalo
+========================================= */
+.login-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
+  max-width:900px;
+  margin:0 auto;
+  padding:0 16px;
+}
+
+/* Orden */
+.qr-box{ order:1; }
+#usuario{ order:2; width:100%; }
+#gift1.gift-anim{
+  order:3;
+  width:min(88vw,360px);
+  margin:10px auto 20px;
+  text-align:center;
+}
+
+/* tamaños cómodos en móvil/tablet y nada fixed */
+@media (max-width:1199.98px){
+  .qr-box{
+    width:clamp(110px,22vw,160px) !important;
+    margin:12px auto 6px !important;
+    position:static !important;
+    inset:auto !important;
+    transform:none !important;
+    z-index:auto !important;
+    pointer-events:auto !important;
+  }
+  #gift1.gift-anim{
+    position:static !important;
+    inset:auto !important;
+    transform:none !important;
+    z-index:auto !important;
+    pointer-events:auto !important;
+  }
+  .login-stack .hero-banner{
+    width:100%;
+    max-width:720px;
+    margin:8px auto;
+    position:relative;
+    z-index:1;
+  }
+  #seccion-registro,#seccion-login{ overflow:visible; }
+}
+
+/* =========================================
+   ≥ 1200px — QR/Regalo fijos y centrados
+========================================= */
+@media (min-width:1200px){
+  :root{
+    /* ajustables a tu gusto */
+    --qr-size: 132px;        /* 128–150px suele verse bien */
+    --qr-left: 96px;         /* separación izquierda del QR */
+    --qr-shift: -40px;       /* fino: + baja, - sube el QR */
+    --gift-w: min(480px,38vw);/* ancho del regalo */
+    --gift-shift: -70px;       /* fino: + baja, - sube el regalo */
+  }
+
+  /* QR fijo izq, centrado vertical */
+  .qr-box{
+    position:fixed !important;
+    left:var(--qr-left) !important;
+    top:calc(50vh - var(--qr-size)/2 + var(--qr-shift)) !important;
+    width:var(--qr-size) !important;
+    margin:0 !important;
+    z-index:3 !important;
+    text-align:center;
+  }
+  .qr-box img{ width:100%; margin:0; }
+  .qr-box .qr-caption{ font-size:14px; }
+
+  /* 🎁 Regalo fijo der, centrado vertical (alineado con el QR) */
+  #gift1.gift-anim{
+    position:fixed !important;
+    right:20px !important;
+    top:calc(50vh - var(--gift-w)/2 + var(--gift-shift)) !important;
+    width:var(--gift-w) !important;
+    margin:0 !important;
+    z-index:3 !important;
+    text-align:center !important;
+  }
+
+  /* Centro con “colchón” para que nada se arrime */
+  .login-stack{
+    max-width:1200px;
+    padding-left: clamp(calc(var(--qr-left) + var(--qr-size) + 24px), 22vw, 320px);
+    padding-right: clamp(calc(20px + min(480px,38vw) + 24px), 40vw, 520px);
+  }
+  #seccion-usuario{ max-width:720px; margin:0 auto; }
+}
+
+/* —— Seguridad scroll/gestos —— */
+html,body{ overflow-y:auto; }
+body:not(.in-app){ touch-action:auto; }

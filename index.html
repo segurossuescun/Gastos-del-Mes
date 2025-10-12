@@ -21,7 +21,7 @@
   <link rel="preload" href="/static/Boogaloo/Boogaloo-Regular.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- Tu CSS principal -->
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=1.0.8">
 
   <!-- Evitar FOUC/FOUT: ocultar hasta que carguen estilos y fuentes -->
   <style>
@@ -38,9 +38,6 @@
     })();
   </script>
 
-  <!-- (Opcional) Lucide: solo si usas íconos <i data-lucide="phone"> -->
-  <!-- Si no los usas, elimina las 2 líneas siguientes -->
-  <script src="https://unpkg.com/lucide@latest" defer></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       if (window.lucide && lucide.createIcons) lucide.createIcons();
@@ -485,18 +482,22 @@
   </div>
 </section>
 
+<!-- === LOGIN / REGISTRO === -->
 <div class="login-stack safe-center">
-<!-- QR y Regalo -->
-<section id="regalo" class="regalo-wrap">
+  <!-- 1) QR -->
   <figure class="qr-box">
-  <img
-    src="/static/QR/AppGastosdelMes.png?v=3"
-    alt="QR App Gastos del Mes"
-    width="260" height="260">
-  <figcaption class="qr-caption">📱Escanea aquí y úsala desde cualquier dispositivo📱</figcaption>
-</figure>
+    <img
+      src="/static/QR/AppGastosdelMes.png?v=3"
+      alt="QR App Gastos del Mes"
+      width="260"
+      height="260"
+    />
+    <figcaption class="qr-caption">
+      📱 Escanea aquí y úsala desde cualquier dispositivo 📱
+    </figcaption>
+  </figure>
 
-    <!-- Registro -->
+  <!-- 2) Formularios -->
   <div id="usuario" class="vista">
     <div id="seccion-usuario" class="form-container">
       <!-- Micro-banner Prueba gratis -->
@@ -504,154 +505,153 @@
         <div id="banner-txt" class="hero-banner__txt">
           🎁 Prueba gratis 7 días. Sin tarjeta.
         </div>
-        <button id="btn-probar-gratis" type="button" class="btn-primario">Prueba Gratis</button>
+        <button id="btn-probar-gratis" type="button" class="btn-primario">
+          Prueba Gratis
+        </button>
       </div>
-    <h3>
+
+      <h3>
         <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="#553071" viewBox="0 0 24 24">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
         </svg>
         Usuario
       </h3>
 
-    <div id="seccion-registro">
-      <h4>📝 Registro</h4>
-      <form id="form-registro">
-        <!-- Nombre -->
-        <input type="text" id="registro-nombre" placeholder="Nombre y Apellido" required>
+      <!-- Registro -->
+      <div id="seccion-registro">
+        <h4>📝 Registro</h4>
+        <form id="form-registro">
+          <!-- Nombre -->
+          <input type="text" id="registro-nombre" placeholder="Nombre y Apellido" required>
 
-        <!-- Usuario + Dominio -->
-        <div class="correo-container">
-          <input 
-            type="text" 
-            id="registro-user" 
-            placeholder="Usuario" 
-            required 
-          >
-          <select 
-            id="registro-dominio" 
-            required
-          >
-            <option value="@gmail.com">@gmail.com</option>
-            <option value="@hotmail.com">@hotmail.com</option>
-            <option value="@yahoo.com">@yahoo.com</option>
-            <option value="@outlook.com">@outlook.com</option>
-            <option value="@icloud.com">@icloud.com</option>
-          </select>
-        </div>
+          <!-- Usuario + Dominio -->
+          <div class="correo-container">
+            <input type="text" id="registro-user" placeholder="Email SIN @dominio" required>
+            <select id="registro-dominio" required>
+              <option value="@gmail.com">@gmail.com</option>
+              <option value="@hotmail.com">@hotmail.com</option>
+              <option value="@yahoo.com">@yahoo.com</option>
+              <option value="@outlook.com">@outlook.com</option>
+              <option value="@icloud.com">@icloud.com</option>
+            </select>
+          </div>
 
-        <!-- Contraseña -->
-        <div class="input-con-ojo">
-          <input type="password" id="registro-password" placeholder="Contraseña" required>
-          <span class="boton-ojo">👁️</span>
-        </div>
+          <!-- Contraseña -->
+          <div class="input-con-ojo">
+            <input type="password" id="registro-password" placeholder="Contraseña" required>
+            <span class="boton-ojo">👁️</span>
+          </div>
 
-        <!-- Confirmar contraseña -->
-        <div class="input-con-ojo">
-          <input type="password" id="registro-password2" placeholder="Repite la contraseña" required>
-          <span class="boton-ojo">👁️</span>
-        </div>
+          <!-- Confirmar contraseña -->
+          <div class="input-con-ojo">
+            <input type="password" id="registro-password2" placeholder="Repite la contraseña" required>
+            <span class="boton-ojo">👁️</span>
+          </div>
 
-        <!-- Nota -->
-        <small style="
-          font-family: Arial, sans-serif;
-          color: #553071;
-          font-size: 12px;
-          line-height: 1.2;
-          text-align: center;
-          display: block;
-          margin-top: 6px;">
-          La contraseña debe tener entre <strong>8–16</strong> caracteres, con al menos: 
-          <strong>Mayúsculas, Minúsculas, Números</strong> y símbolos como <strong>(* & ^ % $ # @ !)</strong>.
-        </small>
-        <button type="submit">Crear Cuenta</button>
+          <!-- Nota -->
+          <small style="font-family: Arial, sans-serif; color:#553071; font-size:12px; line-height:1.2; text-align:center; display:block; margin-top:6px;">
+            La contraseña debe tener entre <strong>8–16</strong> caracteres, con al menos:
+            <strong>Mayúsculas, Minúsculas, Números</strong> y símbolos como <strong>(* & ^ % $ # @ !)</strong>.
+          </small>
 
-        <p class="nota-legal">
-          Al registrarte aceptas los 
-          <a href="https://segurossuescun.com/terminos-y-condiciones" target="_blank" rel="noopener">Términos y Condiciones</a>
-          y la
-          <a href="https://segurossuescun.com/privacy-policy" target="_blank" rel="noopener">Política de Privacidad</a>.
-        </p>
+          <button type="submit">Crear Cuenta</button>
 
-      </form>
-    </div>
+          <p class="nota-legal">
+            Al registrarte aceptas los
+            <a href="https://segurossuescun.com/terminos-y-condiciones" target="_blank" rel="noopener">Términos y Condiciones</a>
+            y la
+            <a href="https://segurossuescun.com/privacy-policy" target="_blank" rel="noopener">Política de Privacidad</a>.
+          </p>
+        </form>
+      </div>
 
-    <!-- Login -->
-    <div id="seccion-login">
-      <h4>🔒 Iniciar sesión</h4>
+      <!-- Login -->
+      <div id="seccion-login">
+        <h4>🔒 Iniciar sesión</h4>
+        <form id="form-login">
+          <input type="email" id="login-usuario" placeholder="Correo" required autocomplete="username">
 
-      <form id="form-login">
-        <input type="email" id="login-usuario" placeholder="Correo" required autocomplete="username" />
+          <div class="input-con-ojo">
+            <input type="password" id="login-password" placeholder="Contraseña" required autocomplete="current-password">
+            <span class="boton-ojo">👁️</span>
+          </div>
 
-        <div class="input-con-ojo">
-          <input type="password" id="login-password" placeholder="Contraseña" required autocomplete="current-password" />
-          <span class="boton-ojo">👁️</span>
-        </div>
+          <div class="fila-aux">
+            <a href="#" id="forgot-link" class="enlace-min">¿Olvidaste tu contraseña?</a>
+          </div>
 
-        <div class="fila-aux">
-          <a href="#" id="forgot-link" class="enlace-min">¿Olvidaste tu contraseña?</a>
-        </div>
+          <button type="submit">Entrar</button>
+        </form>
+      </div>
 
-        <button type="submit">Entrar</button>
-      </form>
-    </div>
-
-    <!-- Zona privada -->
+      <!-- Zona privada -->
       <div id="zona-privada" style="display:none;">
         <h4>🎉 Bienvenido, <span id="usuario-nombre"></span></h4>
       </div>
-</div>
-
-<div id="mini-disponible-overlay" class="mini-disp-overlay" hidden>
-  <div class="mini-disp-card" role="dialog" aria-modal="true" aria-label="Disponible del mes">
-    <button class="mini-disp-close" aria-label="Cerrar">✕</button>
-    <div id="mini-disponible-content">Cargando…</div>
+    </div>
   </div>
-</div>
- <!-- Rive -->
+
+  <!-- 3) Regalo (Rive) -->
   <div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
     <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
   </div>
-</section>
-
-<!-- Rive SIEMPRE antes de tu JS -->
-<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
-
-<script src="{{ url_for('static', filename='js/gift.js') }}?v=1.0.8" defer></script>
-<script src="{{ url_for('static', filename='js/regalo.js') }}?v=1.0.8" defer></script>
-
 </div>
+<!-- === /LOGIN / REGISTRO === -->
 </main>
 
-
-<!-- 1) Flags de entorno + versión -->
+<!-- 1) Flags + versión (primero, para que el resto las lea) -->
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
   window.__PROD__    = !__LOCAL__;
-  window.__VERSION__ = "1.0.8";   // ⬅️ SOLO aquí cambias en cada deploy
+  window.__VERSION__ = "1.0.9"; // ⬅️ súbela cuando hagas deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
+  window.APP  = { apiBase: "/", enableAnalytics: false, brand:{name:"Gastos del Mes"} };
 </script>
 
-<!-- 2) Config cliente opcional -->
-<script>
-  window.APP = { apiBase: "/", enableAnalytics: false, brand:{name:"Gastos del Mes"} };
-</script>
-
-<!-- 3) Librerías de terceros -->
+<!-- 2) Librerías de terceros (defer y en este orden) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
-<script src="https://unpkg.com/@rive-app/canvas@2.9.1"></script>
-  <script src="/static/js/gift.js"></script>
-
-<!-- 4) CSS primero -->
-<link rel="stylesheet" href="/static/style.css?v=1.0.8">
-
 <script src="https://unpkg.com/@rive-app/canvas@2.9.1" defer></script>
-<script src="/static/js/gift.js?v=1.0.8" defer></script>
-<script src="/static/script.js?v=1.0.8" defer></script>
 
-<!-- Service Worker: pasa la versión en la URL -->
+<!-- 3) Tu código (después de Rive) -->
+<script src="/static/js/gift.js?v=1.0.9" defer></script>
+<script src="/static/js/regalo.js?v=1.0.9" defer></script>
+<script src="/static/script.js?v=1.0.9" defer></script>
+
+<!-- 4) Checkout handler (espera a que carguen las libs defer → DOMContentLoaded) -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const url = new URL(window.location.href);
+    const sid = url.searchParams.get('sid');
+    if (!sid) return;
+
+    fetch(`/checkout_verify?session_id=${encodeURIComponent(sid)}`, { credentials:'same-origin' })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok && res.is_active && window.Swal) {
+          Swal.fire({
+            icon:'success',
+            title:'¡Gracias por suscribirte! 💜',
+            text:'Tu acceso está activo más allá de la prueba.',
+            customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
+            buttonsStyling:false
+          });
+        }
+      })
+      .finally(() => {
+        url.searchParams.delete('sid');
+        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
+      })
+      .catch(() => {
+        url.searchParams.delete('sid');
+        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
+      });
+  });
+</script>
+
+<!-- 5) Service Worker (en load está perfecto) -->
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -667,35 +667,6 @@
       }
     });
   }
-</script>
-
-<script>
-  (function handleCheckoutReturnVerified(){
-    const url = new URL(window.location.href);
-    const sid = url.searchParams.get('sid');   // lo ponemos así si más tarde vuelves a pasar sid
-    if (!sid) return;
-
-    fetch(`/checkout_verify?session_id=${encodeURIComponent(sid)}`, { credentials:'same-origin' })
-      .then(r => r.json())
-      .then(res => {
-        if (res.ok && res.is_active) {
-          Swal.fire({
-            icon:'success',
-            title:'¡Gracias por suscribirte! 💜',
-            text:'Tu acceso está activo más allá de la prueba.',
-            customClass:{ popup:'gastos', confirmButton:'btn-gastos' },
-            buttonsStyling:false
-          });
-        }
-        // Limpia la URL para que no reaparezca
-        url.searchParams.delete('sid');
-        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
-      })
-      .catch(() => {
-        url.searchParams.delete('sid');
-        history.replaceState({}, '', url.pathname + (url.searchParams.toString()?`?${url.searchParams}`:'') + url.hash);
-      });
-  })();
 </script>
 </body>
 </html>

@@ -6331,148 +6331,154 @@ document.addEventListener('DOMContentLoaded', () => {
       .in-app #contenido-app{ touch-action:none; transform-origin:0 0; will-change:transform; }
 */
 /* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
+/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
 (function(){
   const root = document.getElementById('contenido-app');
   if (!root) return;
 
-  let active=false, pointers=new Map();
+  let pointers = new Map();
   let startDist=0, startScale=1, scale=1;
   let tx=0, ty=0, startTx=0, startTy=0, raf=0, lastTap=0;
+
   const MIN=1, MAX=3;
 
-  const isEditable = el => el && (el.matches('input, textarea, [contenteditable="true"], select') ||
-                                  el.closest('input, textarea, [contenteditable="true"], select'));
+  // Cambia dinámicamente el touch-action del área solo cuando haga falta
+  function setTA(mode){ root.style.touchAction = mode; }
+  function updateTA(){ setTA(scale > 1 ? 'none' : 'pan-y'); } // scroll libre cuando scale=1
 
   const apply = () => { raf=0; root.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
   const req   = () => { if (!raf) raf = requestAnimationFrame(apply); };
-  const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
 
-  // Limitar pan para que el contenido no “desaparezca”
+  const isEditable = el => el && (el.matches('input, textarea, [contenteditable="true"], select') ||
+                                  el.closest('input, textarea, [contenteditable="true"], select'));
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
   function clampPan(){
+    // Limita pan para no “perder” el contenido
     const vw = root.clientWidth, vh = root.clientHeight;
     const sw = vw * scale, sh = vh * scale;
-
-    // margen para permitir un poquito de pan extra (sensación natural)
-    const m = 40;
-
-    const minX = Math.min(0 + m, vw - sw - m);
-    const maxX = Math.max(0 - m, vw - sw + m);
-
-    const minY = Math.min(0 + m, vh - sh - m);
-    const maxY = Math.max(0 - m, vh - sh + m);
-
-    // cuando scale=1, permite 0..0 (no se va blanco)
+    const m  = 40; // margen amable
     tx = Math.max(Math.min(tx, 0 + m), vw - sw - m);
     ty = Math.max(Math.min(ty, 0 + m), vh - sh - m);
-
-    // si por floating quedara NaN, resetea
-    if (!isFinite(tx)) tx = 0;
-    if (!isFinite(ty)) ty = 0;
   }
 
-  function onDown(e){
-    if (!document.body.classList.contains('in-app')) return;
+  function onPointerDown(e){
+    if (!document.body.classList.contains('in-app')) return; // solo dentro
     if (isEditable(e.target)) return;
 
-    active = true;
-    root.setPointerCapture?.(e.pointerId);
+    // Si estamos en escala 1 y es solo un dedo, NO capturamos → scroll nativo
+    // Capturamos si hay dos dedos (pinch) o si ya estamos en zoom (scale>1)
+    const shouldCapture = (pointers.size >= 1) || (scale > 1);
+    if (shouldCapture) root.setPointerCapture?.(e.pointerId);
 
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
 
     pointers.set(e.pointerId, {
       x, y, sx:x, sy:y,
-      // coordenadas “de contenido” (antes de transform)
       cx:(x - tx)/scale, cy:(y - ty)/scale
     });
 
-    if (pointers.size === 1){ startTx=tx; startTy=ty; }
-    else if (pointers.size === 2){
+    if (pointers.size === 1){
+      startTx = tx; startTy = ty;
+      // si scale=1, dejamos scroll libre → no preventDefault aquí
+    } else if (pointers.size === 2){
       const it = pointers.values(); const a = it.next().value, b = it.next().value;
       startDist = dist(a,b); startScale = scale;
+      // Dos dedos: vamos a manejar el pinch → evita zoom nativo
+      e.preventDefault();
+      updateTA(); // probablemente 'none' si empezamos a ampliar
     }
-    e.preventDefault();
   }
 
-  function onMove(e){
-    if (!active || !pointers.has(e.pointerId)) return;
+  function onPointerMove(e){
+    if (!document.body.classList.contains('in-app')) return;
+    if (!pointers.has(e.pointerId)) return;
 
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     const p = pointers.get(e.pointerId); p.x=x; p.y=y;
 
     const arr = [...pointers.values()];
-    if (arr.length === 1){
-      // PAN con un dedo
-      tx = startTx + (p.x - p.sx);
-      ty = startTy + (p.y - p.sy);
-      clampPan(); req();
-    } else if (arr.length >= 2){
-      // PINCH con 2
+
+    if (arr.length >= 2){
+      // PINCH
       const a = arr[0], b = arr[1];
-      const k = dist(a,b) / startDist || 1;
+      const k = dist(a,b) / (startDist || 1);
       scale = Math.min(MAX, Math.max(MIN, startScale * k));
 
-      // Mantén el punto medio del gesto “quieto”
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2;
+      // Centro del gesto
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const mcx = ((a.cx + b.cx) / 2), mcy = ((a.cy + b.cy) / 2);
 
-      // contenido que está bajo el punto medio
-      const mcx = ( (a.cx + b.cx) / 2 );
-      const mcy = ( (a.cy + b.cy) / 2 );
-
-      // Recoloca para que (mcx,mcy) caiga bajo (mx,my)
       tx = mx - mcx * scale;
       ty = my - mcy * scale;
 
       clampPan(); req();
+      e.preventDefault(); // seguimos evitando zoom nativo
+      updateTA();
     }
-    e.preventDefault();
+    else if (arr.length === 1){
+      // PAN con UN dedo SOLO si estamos ampliados
+      if (scale > 1){
+        const one = arr[0];
+        tx = startTx + (one.x - one.sx);
+        ty = startTy + (one.y - one.sy);
+        clampPan(); req();
+        e.preventDefault(); // prevenimos para que no haga scroll del documento
+      } else {
+        // scale==1 → no tocamos nada; deja que el scroll nativo funcione
+      }
+    }
   }
 
-  function onUp(e){
+  function onPointerUp(e){
     if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
-    if (pointers.size === 0) active = false;
-    e.preventDefault();
+    if (pointers.size === 0){
+      // si soltamos todo y estamos en escala 1, devuelve el touch-action para scroll
+      updateTA();
+    }
   }
 
-  // Doble-tap = reset suave
-  function onTouch(e){
+  // Doble-tap: reset
+  function onTouchStart(e){
     if (!document.body.classList.contains('in-app')) return;
     if (isEditable(e.target)) return;
     const now = Date.now();
     if (now - lastTap < 280){
       scale=1; tx=0; ty=0; startScale=1; startTx=0; startTy=0;
-      req(); e.preventDefault();
+      req();
+      updateTA(); // vuelve a pan-y (scroll nativo)
+      e.preventDefault();
     }
     lastTap = now;
   }
 
-  // Zoom con trackpad/rueda (desktop)
+  // Trackpad/rueda en desktop (solo dentro)
   function onWheel(e){
     if (!document.body.classList.contains('in-app')) return;
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-
     const prev = scale;
-    const delta = -(e.deltaY||0) * 0.0015;
+    const delta = -(e.deltaY||0) * 0.0012; // un pelín más suave
     scale = Math.min(MAX, Math.max(MIN, scale * (1 + delta)));
-
-    // ancla al cursor
     tx = x - ((x - tx) * (scale/prev));
     ty = y - ((y - ty) * (scale/prev));
-
-    clampPan(); req(); e.preventDefault();
+    clampPan(); req();
+    updateTA();
+    e.preventDefault();
   }
 
-  root.addEventListener('pointerdown', onDown, { passive:false });
-  root.addEventListener('pointermove', onMove,  { passive:false });
-  root.addEventListener('pointerup',   onUp,    { passive:false });
-  root.addEventListener('touchstart',  onTouch, { passive:false });
-  root.addEventListener('wheel',       onWheel, { passive:false });
+  // Hooks globales
+  root.addEventListener('pointerdown', onPointerDown, { passive:false });
+  root.addEventListener('pointermove', onPointerMove,  { passive:false });
+  root.addEventListener('pointerup',   onPointerUp,    { passive:false });
+  root.addEventListener('touchstart',  onTouchStart,   { passive:false });
+  root.addEventListener('wheel',       onWheel,        { passive:false });
 
-  // Reset automático al salir de la app
-  window.addEventListener('inApp:off', ()=>{ scale=1; tx=ty=0; req(); });
+  // Reset al salir de la app
+  window.addEventListener('inApp:off', ()=>{ scale=1; tx=ty=0; req(); setTA(''); });
 
-  if (document.body.classList.contains('in-app')) req();
+  // Estado inicial
+  if (document.body.classList.contains('in-app')) updateTA(); // pan-y en escala 1
 })();
