@@ -161,6 +161,8 @@ if (typeof window.mostrarZonaPrivada !== 'function') {
   global.replaceArray = replaceArray; // ← disponible en todo el script
 })(typeof window !== "undefined" ? window : globalThis);
 
+function setInApp(on){ document.body.classList.toggle('in-app', !!on); }
+
 // --- Helpers de config ---------------------------------------------
 // 1) Normaliza nombres/estructuras legacy que puedan venir de la BD o de localStorage
 function normalizarConfigEntrante(cfg) {
@@ -759,6 +761,8 @@ window.__privadaInit = window.__privadaInit ?? false;
 async function mostrarAppYcargar({ force = false } = {}) {
   if (window.__privadaInit && !force) return;
   window.__privadaInit = true;
+
+  setInApp(true);
 
   // mostrar zona privada
   document.getElementById('seccion-login')?.classList.add('oculto');
@@ -3310,16 +3314,6 @@ function limpiarLoginUI() {
 }
 
  // Helper: mostrar SOLO la pantalla de login (sin parpadeos)
-function mostrarSoloLogin() {
-  // Oculta todo lo “privado”
-  ['zona-privada','barra-superior','menu-vistas','seccion-usuario','usuario']
-    .forEach(id => document.getElementById(id)?.classList.add('oculto'));
-
-  // Muestra solo el login (registro se queda oculto)
-  document.getElementById('seccion-login')?.classList.remove('oculto');
-  document.getElementById('seccion-registro')?.classList.add('oculto');
-}
-
 // 🔒 Cerrar sesión (versión anti-parpadeo)
 // una sola vez arriba del archivo:
 window.__netAbort = new AbortController(); // para cancelar fetches pendientes
@@ -3347,6 +3341,9 @@ async function cerrarSesion(e){
   window.__sessionOK = false;
   window.__paywall   = false;
   window.__waitingStripeVerify = false;
+
+  // salgo de “modo app” para que QR/regalo reaparezcan afuera
+ setInApp(false);
 
   // recarga “como primera vez”
   location.replace(location.pathname); // sin queries ni hash
@@ -3382,6 +3379,7 @@ formLogin.addEventListener("submit", async (e) => {
     // 👇👇 MARCAR SESIÓN **ANTES** de disparar cargar_configuracion/bills/etc.
     if (typeof _marcarSesion === "function") _marcarSesion(true);
     else window.__sessionOK = true;
+    setInApp(true);   // ← marca “estoy dentro”
 
     // Guardar usuario para el front
     const usuario = {
@@ -3418,6 +3416,8 @@ function mostrarZonaPrivada(usuario = null) {
   if (!window.__sessionOK) { console.debug('[guard] Ignoro mostrarZonaPrivada: no hay sesión'); return; }
   if (typeof _marcarSesion === 'function') _marcarSesion(true);
   document.body.classList.add('auth');
+
+  setInApp(true);
 
   // datos de usuario (de argumento o de sessionStorage)
   let u = usuario;

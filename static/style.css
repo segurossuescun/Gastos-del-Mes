@@ -2357,3 +2357,6 @@ html, body{ margin:0; padding:0; overflow-x:hidden; }
     opacity:0; pointer-events:none; transition:opacity .15s ease;
   }
 }
+/* Ocultar decoraciones cuando estoy dentro de la app */
+.in-app .qr-box,
+.in-app #gift1 { display:none !important; }
