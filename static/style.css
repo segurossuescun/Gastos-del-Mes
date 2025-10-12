@@ -2360,3 +2360,9 @@ html, body{ margin:0; padding:0; overflow-x:hidden; }
 /* Ocultar decoraciones cuando estoy dentro de la app */
 .in-app .qr-box,
 .in-app #gift1 { display:none !important; }
+/* Área que se puede hacer zoom/pan cuando estás dentro */
+.in-app #contenido-app{
+  touch-action: none;          /* habilita gestures con Pointer Events */
+  transform-origin: 0 0;       /* los cálculos serán desde la esquina sup-izq */
+  will-change: transform;
+}

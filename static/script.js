@@ -161,7 +161,10 @@ if (typeof window.mostrarZonaPrivada !== 'function') {
   global.replaceArray = replaceArray; // ← disponible en todo el script
 })(typeof window !== "undefined" ? window : globalThis);
 
-function setInApp(on){ document.body.classList.toggle('in-app', !!on); }
+function setInApp(on){
+  document.body.classList.toggle('in-app', !!on);
+  window.dispatchEvent(new Event(on ? 'inApp:on' : 'inApp:off'));
+}
 
 // --- Helpers de config ---------------------------------------------
 // 1) Normaliza nombres/estructuras legacy que puedan venir de la BD o de localStorage
@@ -6321,3 +6324,112 @@ document.addEventListener('DOMContentLoaded', () => {
     new MutationObserver(bind).observe(wrap, { childList:true, subtree:true });
   })();
 });
+/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
+/* Requiere: 
+   1) body.in-app cuando estés logueada (con tu setInApp(true/false))
+   2) CSS: 
+      .in-app #contenido-app{ touch-action:none; transform-origin:0 0; will-change:transform; }
+*/
+(function(){
+  const root = document.getElementById('contenido-app');
+  if (!root) return;
+
+  let active=false, pointers=new Map();
+  let startDist=0, startScale=1, scale=1;
+  let tx=0, ty=0, startTx=0, startTy=0, raf=0, lastTap=0;
+  const MIN=1, MAX=3;
+
+  const isEditable = el => el && (el.matches('input, textarea, [contenteditable="true"], select') ||
+                                  el.closest('input, textarea, [contenteditable="true"], select'));
+
+  const apply = () => { raf=0; root.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
+  const req   = () => { if (!raf) raf = requestAnimationFrame(apply); };
+  const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+  const mid   = (a,b) => ({ x:(a.x+b.x)/2, y:(a.y+b.y)/2 });
+
+  function update(){
+    const arr = [...pointers.values()];
+    if (arr.length === 1){
+      const p = arr[0];
+      tx = startTx + (p.x - p.sx);
+      ty = startTy + (p.y - p.sy);
+      req();
+    } else if (arr.length >= 2){
+      const [a,b] = arr;
+      const d = dist(a,b);
+      const s = Math.min(MAX, Math.max(MIN, startScale * (d / startDist)));
+      const m = mid(a,b);
+      // Mantener el centro aparente estable
+      tx = m.x - (a.rx * s + (b.rx * s - a.rx * s)/2);
+      ty = m.y - (a.ry * s + (b.ry * s - a.ry * s)/2);
+      scale = s; req();
+    }
+  }
+
+  function onDown(e){
+    if (!document.body.classList.contains('in-app')) return;
+    if (isEditable(e.target)) return;
+    active = true;
+    root.setPointerCapture?.(e.pointerId);
+    const r = root.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    pointers.set(e.pointerId, { x, y, sx:x, sy:y, rx:(x - tx)/scale, ry:(y - ty)/scale });
+    if (pointers.size === 1){ startTx=tx; startTy=ty; }
+    else if (pointers.size === 2){
+      const [a,b] = [...pointers.values()];
+      startDist = dist(a,b); startScale = scale;
+    }
+    e.preventDefault();
+  }
+
+  function onMove(e){
+    if (!active || !pointers.has(e.pointerId)) return;
+    const r = root.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const p = pointers.get(e.pointerId); p.x=x; p.y=y;
+    update(); e.preventDefault();
+  }
+
+  function onUp(e){
+    if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
+    if (pointers.size === 0) active = false;
+    e.preventDefault();
+  }
+
+  // Doble-tap para reset
+  function onTouch(e){
+    if (!document.body.classList.contains('in-app')) return;
+    if (isEditable(e.target)) return;
+    const now = Date.now();
+    if (now - lastTap < 280){
+      scale=1; tx=0; ty=0; startScale=1; startTx=0; startTy=0; req();
+      e.preventDefault();
+    }
+    lastTap = now;
+  }
+
+  // Wheel/trackpad zoom
+  function onWheel(e){
+    if (!document.body.classList.contains('in-app')) return;
+    const r = root.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const prev = scale;
+    const delta = -(e.deltaY||0) * 0.0015;
+    scale = Math.min(MAX, Math.max(MIN, scale * (1 + delta)));
+    tx = x - ((x - tx) * (scale/prev));
+    ty = y - ((y - ty) * (scale/prev));
+    req(); e.preventDefault();
+  }
+
+  root.addEventListener('pointerdown', onDown, { passive:false });
+  window.addEventListener('pointermove', onMove, { passive:false });
+  window.addEventListener('pointerup', onUp, { passive:false });
+  root.addEventListener('touchstart', onTouch, { passive:false });
+  root.addEventListener('wheel', onWheel, { passive:false });
+
+  // Reset automático al salir de la app (cuando hagas setInApp(false))
+  window.addEventListener('inApp:off', ()=>{ scale=1; tx=ty=0; req(); });
+
+  // Si recargas logueada, aplica la transform base
+  if (document.body.classList.contains('in-app')) req();
+})();
