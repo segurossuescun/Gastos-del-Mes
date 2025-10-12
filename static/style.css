@@ -2366,3 +2366,43 @@ html, body{ margin:0; padding:0; overflow-x:hidden; }
   transform-origin: 0 0;       /* los cálculos serán desde la esquina sup-izq */
   will-change: transform;
 }
+/* Desktop */
+@media (min-width: 901px){
+  .qr-caption{
+    margin-top:8px;
+    font-size:14px;
+    color:#553071;
+    text-align:center;
+    background:#ffffffcc;
+    backdrop-filter: blur(2px);
+    padding:4px 8px;
+    border-radius:8px;
+  }
+}
+
+/* Móvil: centrado y compacto */
+@media (max-width: 900px){
+  .login-stack .qr-box{ position:static !important; width:120px !important; margin:12px auto 4px !important; }
+  .login-stack .qr-caption{
+    margin-top:6px;
+    font-size:13px;
+    color:#553071;
+    text-align:center;
+  }
+}
+
+/* Dentro de la app se oculta todo el bloque QR (caption incluido) */
+.in-app .qr-box{ display:none !important; }
+/* al final de tu CSS */
+.qr-box .qr-caption{
+  color:#553071 !important;     /* moradito */
+  text-align:center !important; /* centrado */
+  font-weight:600;
+  margin-top:8px;
+  line-height:1.25;
+}
+.qr-caption .qr-ico{      /* si usas el SVG del teléfono */
+  vertical-align:-2px;
+  margin-right:6px;
+}
+

@@ -6330,6 +6330,7 @@ document.addEventListener('DOMContentLoaded', () => {
    2) CSS: 
       .in-app #contenido-app{ touch-action:none; transform-origin:0 0; will-change:transform; }
 */
+/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
 (function(){
   const root = document.getElementById('contenido-app');
   if (!root) return;
@@ -6345,38 +6346,49 @@ document.addEventListener('DOMContentLoaded', () => {
   const apply = () => { raf=0; root.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
   const req   = () => { if (!raf) raf = requestAnimationFrame(apply); };
   const dist  = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
-  const mid   = (a,b) => ({ x:(a.x+b.x)/2, y:(a.y+b.y)/2 });
 
-  function update(){
-    const arr = [...pointers.values()];
-    if (arr.length === 1){
-      const p = arr[0];
-      tx = startTx + (p.x - p.sx);
-      ty = startTy + (p.y - p.sy);
-      req();
-    } else if (arr.length >= 2){
-      const [a,b] = arr;
-      const d = dist(a,b);
-      const s = Math.min(MAX, Math.max(MIN, startScale * (d / startDist)));
-      const m = mid(a,b);
-      // Mantener el centro aparente estable
-      tx = m.x - (a.rx * s + (b.rx * s - a.rx * s)/2);
-      ty = m.y - (a.ry * s + (b.ry * s - a.ry * s)/2);
-      scale = s; req();
-    }
+  // Limitar pan para que el contenido no “desaparezca”
+  function clampPan(){
+    const vw = root.clientWidth, vh = root.clientHeight;
+    const sw = vw * scale, sh = vh * scale;
+
+    // margen para permitir un poquito de pan extra (sensación natural)
+    const m = 40;
+
+    const minX = Math.min(0 + m, vw - sw - m);
+    const maxX = Math.max(0 - m, vw - sw + m);
+
+    const minY = Math.min(0 + m, vh - sh - m);
+    const maxY = Math.max(0 - m, vh - sh + m);
+
+    // cuando scale=1, permite 0..0 (no se va blanco)
+    tx = Math.max(Math.min(tx, 0 + m), vw - sw - m);
+    ty = Math.max(Math.min(ty, 0 + m), vh - sh - m);
+
+    // si por floating quedara NaN, resetea
+    if (!isFinite(tx)) tx = 0;
+    if (!isFinite(ty)) ty = 0;
   }
 
   function onDown(e){
     if (!document.body.classList.contains('in-app')) return;
     if (isEditable(e.target)) return;
+
     active = true;
     root.setPointerCapture?.(e.pointerId);
+
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    pointers.set(e.pointerId, { x, y, sx:x, sy:y, rx:(x - tx)/scale, ry:(y - ty)/scale });
+
+    pointers.set(e.pointerId, {
+      x, y, sx:x, sy:y,
+      // coordenadas “de contenido” (antes de transform)
+      cx:(x - tx)/scale, cy:(y - ty)/scale
+    });
+
     if (pointers.size === 1){ startTx=tx; startTy=ty; }
     else if (pointers.size === 2){
-      const [a,b] = [...pointers.values()];
+      const it = pointers.values(); const a = it.next().value, b = it.next().value;
       startDist = dist(a,b); startScale = scale;
     }
     e.preventDefault();
@@ -6384,10 +6396,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onMove(e){
     if (!active || !pointers.has(e.pointerId)) return;
+
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
     const p = pointers.get(e.pointerId); p.x=x; p.y=y;
-    update(); e.preventDefault();
+
+    const arr = [...pointers.values()];
+    if (arr.length === 1){
+      // PAN con un dedo
+      tx = startTx + (p.x - p.sx);
+      ty = startTy + (p.y - p.sy);
+      clampPan(); req();
+    } else if (arr.length >= 2){
+      // PINCH con 2
+      const a = arr[0], b = arr[1];
+      const k = dist(a,b) / startDist || 1;
+      scale = Math.min(MAX, Math.max(MIN, startScale * k));
+
+      // Mantén el punto medio del gesto “quieto”
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+
+      // contenido que está bajo el punto medio
+      const mcx = ( (a.cx + b.cx) / 2 );
+      const mcy = ( (a.cy + b.cy) / 2 );
+
+      // Recoloca para que (mcx,mcy) caiga bajo (mx,my)
+      tx = mx - mcx * scale;
+      ty = my - mcy * scale;
+
+      clampPan(); req();
+    }
+    e.preventDefault();
   }
 
   function onUp(e){
@@ -6396,40 +6436,43 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
   }
 
-  // Doble-tap para reset
+  // Doble-tap = reset suave
   function onTouch(e){
     if (!document.body.classList.contains('in-app')) return;
     if (isEditable(e.target)) return;
     const now = Date.now();
     if (now - lastTap < 280){
-      scale=1; tx=0; ty=0; startScale=1; startTx=0; startTy=0; req();
-      e.preventDefault();
+      scale=1; tx=0; ty=0; startScale=1; startTx=0; startTy=0;
+      req(); e.preventDefault();
     }
     lastTap = now;
   }
 
-  // Wheel/trackpad zoom
+  // Zoom con trackpad/rueda (desktop)
   function onWheel(e){
     if (!document.body.classList.contains('in-app')) return;
     const r = root.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
+
     const prev = scale;
     const delta = -(e.deltaY||0) * 0.0015;
     scale = Math.min(MAX, Math.max(MIN, scale * (1 + delta)));
+
+    // ancla al cursor
     tx = x - ((x - tx) * (scale/prev));
     ty = y - ((y - ty) * (scale/prev));
-    req(); e.preventDefault();
+
+    clampPan(); req(); e.preventDefault();
   }
 
   root.addEventListener('pointerdown', onDown, { passive:false });
-  window.addEventListener('pointermove', onMove, { passive:false });
-  window.addEventListener('pointerup', onUp, { passive:false });
-  root.addEventListener('touchstart', onTouch, { passive:false });
-  root.addEventListener('wheel', onWheel, { passive:false });
+  root.addEventListener('pointermove', onMove,  { passive:false });
+  root.addEventListener('pointerup',   onUp,    { passive:false });
+  root.addEventListener('touchstart',  onTouch, { passive:false });
+  root.addEventListener('wheel',       onWheel, { passive:false });
 
-  // Reset automático al salir de la app (cuando hagas setInApp(false))
+  // Reset automático al salir de la app
   window.addEventListener('inApp:off', ()=>{ scale=1; tx=ty=0; req(); });
 
-  // Si recargas logueada, aplica la transform base
   if (document.body.classList.contains('in-app')) req();
 })();
