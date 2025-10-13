@@ -5,7 +5,7 @@
 
   <meta charset="UTF-8" />
   <meta name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 
   <title>Gastos del Mes</title>
 
@@ -595,6 +595,15 @@
   <div id="gift1" class="gift-anim" aria-label="Sorpresa de bienvenida">
     <canvas id="gift1-pre" width="500" height="500" aria-label="Caja cerrada"></canvas>
   </div>
+  <!-- Modal/Overlay para la tarjeta grande -->
+<div id="gift-image-modal" hidden>
+  <div class="gift-modal-backdrop" data-close="1"></div>
+  <div class="gift-modal-card" role="dialog" aria-modal="true" aria-label="Tarjeta de regalo">
+    <button class="gift-close" type="button" data-close="1" aria-label="Cerrar">✖</button>
+    <img id="gift-image" src="static/animaciones/otra_tarjeta.png" alt="Tarjeta de regalo" />
+  </div>
+</div>
+
 </div>
 <!-- === /LOGIN / REGISTRO === -->
 </main>
@@ -603,7 +612,7 @@
 <script>
   const __LOCAL__ = ['localhost','127.0.0.1'].includes(location.hostname);
   window.__PROD__    = !__LOCAL__;
-  window.__VERSION__ = "1.0.9"; // ⬅️ súbela cuando hagas deploy
+  window.__VERSION__ = "1.0.10"; // ⬅️ súbela cuando hagas deploy
   window.log  = (...a) => { if (!window.__PROD__) console.log(...a); };
   window.warn = (...a) => { if (!window.__PROD__) console.warn(...a); };
   window.err  = (...a) => console.error(...a);
@@ -616,9 +625,9 @@
 <script src="https://unpkg.com/@rive-app/canvas@2.9.1" defer></script>
 
 <!-- 3) Tu código (después de Rive) -->
-<script src="/static/js/gift.js?v=1.0.9" defer></script>
-<script src="/static/js/regalo.js?v=1.0.9" defer></script>
-<script src="/static/script.js?v=1.0.9" defer></script>
+<script src="/static/js/gift.js?v=1.0.10" defer></script>
+<script src="/static/js/regalo.js?v=1.0.10" defer></script>
+<script src="/static/script.js?v=1.0.10" defer></script>
 
 <!-- 4) Checkout handler (espera a que carguen las libs defer → DOMContentLoaded) -->
 <script>

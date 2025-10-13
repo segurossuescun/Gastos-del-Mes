@@ -6073,412 +6073,212 @@ window.pintarTooltipCampana = pintarTooltipCampana;
   });
 })();
 
-/* gift.js — sin ojito, zoom aparte y grandote 😎 */
-(function initGift(){
-  // ====== VERSION / RUTAS ======
-  const VER       = "1.0.8"; // para bust de caché
+/* gift.js — PRE (saltarina) → OPEN (caja abre) → IMAGEN (otra_tarjeta)
+   - Clic en PRE: pasa a OPEN.
+   - Doble-clic en OPEN: muestra IMAGEN.
+   - Clic en IMAGEN: vuelve a PRE.
+*/
+
+(function(){
+
+  // ====== RUTAS ======
+  const VER       = (window.__VERSION__ || "1.0.0");
   const PRE_SRC   = `/static/animaciones/caja_de_regalo_saltarina.riv?v=${VER}`;
   const OPEN_SRC  = `/static/animaciones/caja_abierta.riv?v=${VER}`;
-  const ZOOM_SRC  = `/static/animaciones/tarjeta.riv?v=${VER}`; // archivo aparte
-  const ZOOM_ANIM = "solo tarjeta";          // nombre exacto dentro de tarjeta.riv
-
-  // Zoom grande (CSS y resolución interna para nitidez)
-  const ZOOM_CSS_W = 720;                    // px visibles (ajusta si quieres 800)
-  const DPR = Math.ceil(window.devicePixelRatio || 1);
-  const ZOOM_CANVAS_PX = Math.round(ZOOM_CSS_W * DPR);
+  const IMG_SRC   = `/static/animaciones/otra_tarjeta.png?v=${VER}`; // ← tu imagen
 
   // ====== DOM ======
   const wrap = document.getElementById("gift1");
-  const hint = wrap?.querySelector(".gift-hint");
   const preC = document.getElementById("gift1-pre");
-  if (!wrap || !preC) { console.warn("gift.js: falta #gift1 o #gift1-pre"); return; }
+  if (!wrap || !preC) { console.warn("[gift] falta #gift1 o #gift1-pre"); return; }
 
-  // ====== Layout ======
-  const layoutOpen = new rive.Layout({ fit: rive.Fit.Contain, alignment: rive.Alignment.Center });
-  const layoutZoom = new rive.Layout({ fit: rive.Fit.Cover,   alignment: rive.Alignment.Center });
+  // ====== Layout Rive ======
+  const layoutContain = new rive.Layout({ fit: rive.Fit.Contain, alignment: rive.Alignment.Center });
 
   // ====== Estado ======
-  let stage = "pre";                 // pre | open | zoom | frozen
+  let stage = "pre"; // pre | open | image
+  let prePlayer  = null;
   let openPlayer = null;
-  let zoomPlayer = null;
-  let zoomCanvas = null;
 
-  // ====== PRE (loop) ======
-  const prePlayer = new rive.Rive({
-    src: PRE_SRC,
-    canvas: preC,
-    autoplay: true,
-    loop: true,
-    layout: layoutOpen
-  });
+  // Utilidad: limpia hijos (menos opcionalmente un id)
+  function removeChildById(id){ document.getElementById(id)?.remove(); }
 
-  // ====== Crear OPEN (solo 1 vez) ======
-  function makeOpenPlayer(){
-    if (openPlayer) return openPlayer;
+  // ---------- PRE (loop) ----------
+  function toPre(){
+    // Limpia OPEN e IMAGEN si existieran
+    try { openPlayer?.stop?.(); } catch{}
+    openPlayer = null;
+    removeChildById("gift1-open");
+    removeChildById("gift1-img");
 
-    try { prePlayer.stop(); prePlayer.cleanup(); } catch(e){}
-    preC.remove();
+    // Si ya existe el canvas PRE, úsalo; si no, créalo
+    let pre = document.getElementById("gift1-pre");
+    if (!pre){
+      pre = document.createElement("canvas");
+      pre.id = "gift1-pre";
+      pre.width = 500; pre.height = 500;
+      pre.style.display = "block";
+      pre.style.background = "transparent";
+      wrap.appendChild(pre);
+    }
 
+    // (Re)crear player
+    try { prePlayer?.stop?.(); prePlayer?.cleanup?.(); } catch{}
+    prePlayer = new rive.Rive({
+      src: PRE_SRC,
+      canvas: pre,
+      autoplay: true,
+      loop: true,
+      layout: layoutContain
+    });
+
+    stage = "pre";
+    // Listeners de interacción (clic para pasar a OPEN)
+    ensureHandlers();
+  }
+
+  // ---------- OPEN (una sola reproducción, sin parpadeo) ----------
+  function toOpen(){
+    if (stage !== "pre") return;
+
+    // Dejar el PRE visible debajo hasta que OPEN cargue
+    const preCanvas = document.getElementById("gift1-pre");
+
+    // Crear canvas OPEN por encima
     const oc = document.createElement("canvas");
     oc.id = "gift1-open";
     oc.width = 500; oc.height = 500;
-    oc.style.background = "transparent";
     oc.style.display = "block";
-    wrap.insertBefore(oc, hint || null);
+    oc.style.background = "transparent";
+    wrap.insertBefore(oc, preCanvas || wrap.firstChild);
 
-    // Doble clic directo = zoom
-    oc.addEventListener("dblclick", () => {
-      if (stage === "open") startZoom();
-    });
-
-    openPlayer = new rive.Rive({
-      src: OPEN_SRC,
-      canvas: oc,
-      autoplay: true,
-      loop: false,
-      layout: layoutOpen,
-      onLoad: () => {
-        try { openPlayer.play("Open"); } catch(e) { openPlayer.play(); }
-        stage = "open";
+    let loaded = false;
+    const failSafe = setTimeout(() => {
+      if (!loaded) {
+        console.warn("[gift] timeout OPEN; regreso a PRE");
+        oc.remove();
+        toPre();
       }
-    });
+    }, 4000);
 
-    return openPlayer;
-  }
-
-  // ====== Utilidad reproducir por nombre o default ======
-  function playOne(player, names=[]){
-    for (const n of names){ try { player.play(n); return n; } catch(e){} }
-    try { player.play(); return "(default)"; } catch(e){ return null; }
-  }
-
-  // ====== ZOOM (usa tarjeta.riv y lo mostramos MÁS GRANDE) ======
-  function startZoom(){
-    // Oculta OPEN
-    const oc = document.getElementById("gift1-open");
-    if (oc) oc.style.display = "none";
-
-    // Agranda el contenedor por CSS
-    wrap.classList.add("zooming");
-
-    // Crea canvas de zoom si hace falta
-    if (!zoomCanvas){
-      zoomCanvas = document.createElement("canvas");
-      zoomCanvas.id = "gift1-zoom";
-      // resolución interna alta (nitidez)
-      zoomCanvas.width  = ZOOM_CANVAS_PX;
-      zoomCanvas.height = ZOOM_CANVAS_PX;
-      // tamaño visual
-      zoomCanvas.style.maxWidth  = ZOOM_CSS_W + "px";
-      zoomCanvas.style.width     = "100%";
-      zoomCanvas.style.height    = "auto";
-      zoomCanvas.style.background= "transparent";
-      zoomCanvas.style.display   = "block";
-      wrap.insertBefore(zoomCanvas, hint || null);
-    }
-
-    // Crea el player si hace falta
-    if (!zoomPlayer){
-      zoomPlayer = new rive.Rive({
-        src: ZOOM_SRC,
-        canvas: zoomCanvas,
-        autoplay: false,
+    try {
+      // Detén PRE, pero solo cuando OPEN ya esté listo
+      openPlayer = new rive.Rive({
+        src: OPEN_SRC,
+        canvas: oc,
+        autoplay: true,
         loop: false,
-        layout: layoutZoom,           // llena más que Contain
+        layout: layoutContain,
         onLoad: () => {
-          try { zoomPlayer.play(ZOOM_ANIM); } catch(e){ zoomPlayer.play(); }
-          stage = "zoom";
+          loaded = true;
+          clearTimeout(failSafe);
+
+          // Reproduce la animación 'Open' o la default
+          try { openPlayer.play("Open"); } catch { try { openPlayer.play(); } catch{} }
+          stage = "open";
+
+          // Ahora sí, quita el PRE
+          try { prePlayer?.stop?.(); } catch{}
+          preCanvas?.remove();
+
+          // Cuando termine la animación (no loopea), volvemos a PRE
+          // Si prefieres quedarse en open hasta doble-click, comenta la siguiente línea:
+          // openPlayer.on('stop', () => { toPre(); });
         }
       });
 
-      // Congela al terminar "solo tarjeta"
-      zoomPlayer.on('loop', (ev)=>{
-        const name = (ev?.animationName||"").trim().toLowerCase();
-        if (name === ZOOM_ANIM.toLowerCase() && stage !== "frozen") {
-          try { zoomPlayer.pause(); } catch(e){}
-          stage = "frozen";
-        }
-      });
-    } else {
-      try { zoomPlayer.reset(); } catch(e){}
-      try { zoomPlayer.play(ZOOM_ANIM); } catch(e){ zoomPlayer.play(); }
-      stage = "zoom";
+      // Doble-clic en el contenedor cuando está en OPEN → IMAGEN
+      // (lo ponemos global al wrap para evitar problemas de pointer-events)
+      // El listener se añade una sola vez en ensureHandlers()
+
+    } catch (e) {
+      console.error("[gift] error OPEN:", e);
+      clearTimeout(failSafe);
+      oc.remove();
+      toPre();
     }
   }
-// al final de la función startZoom()
-window.__giftStartZoom = startZoom;
 
-  // ====== Reanudar desde congelado → volver a OPEN ======
-  function resumeFromFrozen(){
-    // Limpia zoom si existe
-    if (zoomCanvas){ zoomCanvas.remove(); zoomCanvas = null; }
-    if (zoomPlayer){ try{ zoomPlayer.cleanup(); }catch(e){} zoomPlayer = null; }
+  // ---------- IMAGEN (otra_tarjeta) ----------
+  function toImage(){
+    if (stage !== "open") return;
 
-    // Quita tamaño extra
-    wrap.classList.remove("zooming");
+    // Limpia PRE y OPEN
+    try { prePlayer?.stop?.(); } catch{}
+    try { openPlayer?.stop?.(); } catch{}
+    removeChildById("gift1-pre");
+    removeChildById("gift1-open");
+    openPlayer = null;
 
-    // Muestra OPEN otra vez
-    const oc = document.getElementById("gift1-open");
-    if (oc) oc.style.display = "block";
+    // Crea <img>
+    const img = document.createElement("img");
+    img.id = "gift1-img";
+    img.src = IMG_SRC;
+    img.alt = "Tarjeta";
+    img.style.display = "block";
+    img.style.maxWidth = "720px";
+    img.style.width = "100%";
+    img.style.height = "auto";
+    img.style.margin = "0 auto";
+    img.style.userSelect = "none";
+    img.draggable = false;
 
-    if (!openPlayer) return;
-    try { openPlayer.reset(); } catch(e){}
-    playOne(openPlayer, ["Open","Default","Animation 1"]);
-    stage = "open";
+    wrap.appendChild(img);
+    stage = "image";
+    // Clic en la imagen: volver a PRE
+    // (listener al wrap, ver ensureHandlers)
   }
 
-  // ====== Interacciones ======
-  // Clic simple: abrir o reanudar
-  wrap.addEventListener("click", () => {
-    if (stage === "pre"){ makeOpenPlayer(); return; }
-    if (stage === "frozen"){ resumeFromFrozen(); return; }
-    // en "open"/"zoom": usa DOBLE clic para activar zoom
-  });
-})();
-document.addEventListener('focusin', e => {
-  if (e.target.matches('input, textarea, [contenteditable="true"]'))
-    document.body.classList.add('hide-anim-on-input');
-});
-document.addEventListener('focusout', e => {
-  if (e.target.matches('input, textarea, [contenteditable="true"]'))
-    document.body.classList.remove('hide-anim-on-input');
-});
-// === Touch: doble-tap para hacer ZOOM ===
-(function setupGiftDoubleTap(){
-  const wrap = document.getElementById('gift1');
-  if (!wrap) return;
+ // ---------- Interacciones (una sola vez) ----------
+let handlersReady = false;
+function ensureHandlers(){
+  if (handlersReady) return;
 
+  // 1) CLIC general:
+  //    - PRE  -> OPEN
+  //    - IMAGE -> PRE
+  wrap.addEventListener("click", (ev) => {
+    if (stage === "pre") {
+      ev.preventDefault();
+      toOpen();
+    } else if (stage === "image") {
+      ev.preventDefault();
+      toPre();
+    }
+    // En "open" no hacemos nada con click; el paso a imagen es por doble clic/tap
+  }, { passive:false });
+
+  // 2) DOBLE-CLIC de escritorio: OPEN -> IMAGEN
+  wrap.addEventListener("dblclick", (ev) => {
+    if (stage === "open") {
+      ev.preventDefault();
+      toImage();
+    }
+  }, { passive:false });
+
+  // 3) DOBLE-TAP táctil: OPEN -> IMAGEN
   let lastTap = 0;
-  function isTouch(){ return 'ontouchstart' in window || navigator.maxTouchPoints > 0; }
+  wrap.addEventListener("touchstart", (ev) => {
+    // Solo nos interesa en "open"; en "pre" el click normal ya lleva a OPEN
+    if (stage !== "open") return;
 
-  // devuelve el canvas visible (pre u open)
-  function currentCanvas(){
-    return document.getElementById('gift1-zoom')
-        || document.getElementById('gift1-open')
-        || document.getElementById('gift1-pre');
-  }
-
-  // el zoom lo dispara gift.js con startZoom(); lo exponemos si no está global:
-  window.__giftStartZoom = window.__giftStartZoom || (typeof startZoom === 'function' ? startZoom : null);
-
-  // Escucha taps sobre el canvas actual
-  function bindTap(){
-    const c = currentCanvas();
-    if (!c || !isTouch()) return;
-    c.addEventListener('touchstart', (ev) => {
-      const now = Date.now();
-      const delta = now - lastTap;
-      lastTap = now;
-
-      // tap simple: deja que tu click normal haga "abrir" (pre -> open)
-      // doble-tap (<300ms): dispara zoom si está la función disponible
-      if (delta < 300 && window.__giftStartZoom) {
-        ev.preventDefault();
-        try { window.__giftStartZoom(); } catch(e){}
-      }
-    }, { passive: false });
-  }
-
-  // al cargar y cada vez que cambie el canvas, re-enlazamos
-  bindTap();
-  const mo = new MutationObserver(bindTap);
-  mo.observe(wrap, { childList: true, subtree: true });
-})();
-
-document.addEventListener('DOMContentLoaded', () => {
-  // 1) Marca móvil si <=900px
-  (function mobileClass(){
-    const mql = window.matchMedia('(max-width: 900px)');
-    function apply(){ document.body.classList.toggle('mobile-stack', mql.matches); }
-    apply();
-    try { mql.addEventListener('change', apply); } catch { mql.addListener(apply); }
-  })();
-
-  // 2) Doble-tap para zoom en móvil
-  (function setupGiftDoubleTap(){
-    const wrap = document.getElementById('gift1');
-    if (!wrap) return;
-    let last = 0;
-
-    function startZoomSafe(){
-      if (typeof window.__giftStartZoom === 'function') return window.__giftStartZoom();
-      if (typeof window.startZoom === 'function') return window.startZoom();
-      const c = document.getElementById('gift1-open') || document.getElementById('gift1-pre');
-      if (c) c.dispatchEvent(new MouseEvent('dblclick', { bubbles:true }));
-    }
-    function currentCanvas(){
-      return document.getElementById('gift1-zoom')
-          || document.getElementById('gift1-open')
-          || document.getElementById('gift1-pre');
-    }
-    function bind(){
-      const c = currentCanvas();
-      if (!c) return;
-      c.addEventListener('touchstart', (ev) => {
-        const now = Date.now();
-        if (now - last < 280) { ev.preventDefault(); startZoomSafe(); }
-        last = now;
-      }, { passive:false });
-    }
-    bind();
-    new MutationObserver(bind).observe(wrap, { childList:true, subtree:true });
-  })();
-});
-/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
-/* Requiere: 
-   1) body.in-app cuando estés logueada (con tu setInApp(true/false))
-   2) CSS: 
-      .in-app #contenido-app{ touch-action:none; transform-origin:0 0; will-change:transform; }
-*/
-/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
-/* === Pinch-zoom + pan SOLO dentro de la app (#contenido-app) === */
-(function(){
-  const root = document.getElementById('contenido-app');
-  if (!root) return;
-
-  let pointers = new Map();
-  let startDist=0, startScale=1, scale=1;
-  let tx=0, ty=0, startTx=0, startTy=0, raf=0, lastTap=0;
-
-  const MIN=1, MAX=3;
-
-  // Cambia dinámicamente el touch-action del área solo cuando haga falta
-  function setTA(mode){ root.style.touchAction = mode; }
-  function updateTA(){ setTA(scale > 1 ? 'none' : 'pan-y'); } // scroll libre cuando scale=1
-
-  const apply = () => { raf=0; root.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
-  const req   = () => { if (!raf) raf = requestAnimationFrame(apply); };
-
-  const isEditable = el => el && (el.matches('input, textarea, [contenteditable="true"], select') ||
-                                  el.closest('input, textarea, [contenteditable="true"], select'));
-  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
-
-  function clampPan(){
-    // Limita pan para no “perder” el contenido
-    const vw = root.clientWidth, vh = root.clientHeight;
-    const sw = vw * scale, sh = vh * scale;
-    const m  = 40; // margen amable
-    tx = Math.max(Math.min(tx, 0 + m), vw - sw - m);
-    ty = Math.max(Math.min(ty, 0 + m), vh - sh - m);
-  }
-
-  function onPointerDown(e){
-    if (!document.body.classList.contains('in-app')) return; // solo dentro
-    if (isEditable(e.target)) return;
-
-    // Si estamos en escala 1 y es solo un dedo, NO capturamos → scroll nativo
-    // Capturamos si hay dos dedos (pinch) o si ya estamos en zoom (scale>1)
-    const shouldCapture = (pointers.size >= 1) || (scale > 1);
-    if (shouldCapture) root.setPointerCapture?.(e.pointerId);
-
-    const r = root.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-
-    pointers.set(e.pointerId, {
-      x, y, sx:x, sy:y,
-      cx:(x - tx)/scale, cy:(y - ty)/scale
-    });
-
-    if (pointers.size === 1){
-      startTx = tx; startTy = ty;
-      // si scale=1, dejamos scroll libre → no preventDefault aquí
-    } else if (pointers.size === 2){
-      const it = pointers.values(); const a = it.next().value, b = it.next().value;
-      startDist = dist(a,b); startScale = scale;
-      // Dos dedos: vamos a manejar el pinch → evita zoom nativo
-      e.preventDefault();
-      updateTA(); // probablemente 'none' si empezamos a ampliar
-    }
-  }
-
-  function onPointerMove(e){
-    if (!document.body.classList.contains('in-app')) return;
-    if (!pointers.has(e.pointerId)) return;
-
-    const r = root.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    const p = pointers.get(e.pointerId); p.x=x; p.y=y;
-
-    const arr = [...pointers.values()];
-
-    if (arr.length >= 2){
-      // PINCH
-      const a = arr[0], b = arr[1];
-      const k = dist(a,b) / (startDist || 1);
-      scale = Math.min(MAX, Math.max(MIN, startScale * k));
-
-      // Centro del gesto
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const mcx = ((a.cx + b.cx) / 2), mcy = ((a.cy + b.cy) / 2);
-
-      tx = mx - mcx * scale;
-      ty = my - mcy * scale;
-
-      clampPan(); req();
-      e.preventDefault(); // seguimos evitando zoom nativo
-      updateTA();
-    }
-    else if (arr.length === 1){
-      // PAN con UN dedo SOLO si estamos ampliados
-      if (scale > 1){
-        const one = arr[0];
-        tx = startTx + (one.x - one.sx);
-        ty = startTy + (one.y - one.sy);
-        clampPan(); req();
-        e.preventDefault(); // prevenimos para que no haga scroll del documento
-      } else {
-        // scale==1 → no tocamos nada; deja que el scroll nativo funcione
-      }
-    }
-  }
-
-  function onPointerUp(e){
-    if (pointers.has(e.pointerId)) pointers.delete(e.pointerId);
-    if (pointers.size === 0){
-      // si soltamos todo y estamos en escala 1, devuelve el touch-action para scroll
-      updateTA();
-    }
-  }
-
-  // Doble-tap: reset
-  function onTouchStart(e){
-    if (!document.body.classList.contains('in-app')) return;
-    if (isEditable(e.target)) return;
-    const now = Date.now();
-    if (now - lastTap < 280){
-      scale=1; tx=0; ty=0; startScale=1; startTx=0; startTy=0;
-      req();
-      updateTA(); // vuelve a pan-y (scroll nativo)
-      e.preventDefault();
-    }
+    const now   = Date.now();
+    const delta = now - lastTap;
     lastTap = now;
-  }
 
-  // Trackpad/rueda en desktop (solo dentro)
-  function onWheel(e){
-    if (!document.body.classList.contains('in-app')) return;
-    const r = root.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    const prev = scale;
-    const delta = -(e.deltaY||0) * 0.0012; // un pelín más suave
-    scale = Math.min(MAX, Math.max(MIN, scale * (1 + delta)));
-    tx = x - ((x - tx) * (scale/prev));
-    ty = y - ((y - ty) * (scale/prev));
-    clampPan(); req();
-    updateTA();
-    e.preventDefault();
-  }
+    // Dos taps rápidos (<280ms) => actuamos como "doble click"
+    if (delta < 280) {
+      ev.preventDefault();      // evita zoom/scroll raros
+      ev.stopPropagation();
+      toImage();
+    }
+  }, { passive:false });
 
-  // Hooks globales
-  root.addEventListener('pointerdown', onPointerDown, { passive:false });
-  root.addEventListener('pointermove', onPointerMove,  { passive:false });
-  root.addEventListener('pointerup',   onPointerUp,    { passive:false });
-  root.addEventListener('touchstart',  onTouchStart,   { passive:false });
-  root.addEventListener('wheel',       onWheel,        { passive:false });
+  handlersReady = true;
+}
 
-  // Reset al salir de la app
-  window.addEventListener('inApp:off', ()=>{ scale=1; tx=ty=0; req(); setTA(''); });
+  // Init
+  toPre();
 
-  // Estado inicial
-  if (document.body.classList.contains('in-app')) updateTA(); // pan-y en escala 1
 })();
+

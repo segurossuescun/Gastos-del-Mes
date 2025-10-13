@@ -70,7 +70,6 @@ body.fuente-personalizada * {
 .vista {
   display: none;
   flex-direction: column;
-  justify-content: flex-start;
   align-items: center;
   min-height: calc(100vh - 150px);
   max-width: 1000px;
@@ -126,6 +125,17 @@ body.fuente-personalizada * {
   min-width: 100px;
   cursor: pointer;
   transition: background 0.3s ease;
+}
+/* Contenedor de la vista activa: ocupa ancho completo y centra su contenido */
+.vista.activa{
+  display: flex;
+  justify-content: center;   /* centra horizontalmente el contenido */
+  align-items: flex-start;    /* contenido alineado arriba (no centro vertical) */
+  padding: 16px;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;        /* por si algún hijo usa absolute */
 }
 
 /* ================================
@@ -2107,9 +2117,21 @@ html, body{ margin:0; padding:0; overflow-x:hidden; }
 
 /* =========================================
    LOGIN / REGISTRO — LAYOUT CANÓNICO ÚNICO
+   (sin zooms raros y centrado simétrico)
 ========================================= */
 
-/* —— BASE —— */
+/* Reset básico */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+html, body { margin:0; padding:0; overflow-x:hidden; }
+
+/* ===== Variables ===== */
+:root{
+  --form-max: clamp(320px, 92vw, 640px);    /* ancho del carril del form */
+}
+
+/* ===== BASE ===== */
 #usuario{
   position:relative;
   display:flex;
@@ -2117,148 +2139,247 @@ html, body{ margin:0; padding:0; overflow-x:hidden; }
 }
 #seccion-usuario{
   position:static !important;
-  top:auto !important;
-  left:auto !important;
-  transform:none !important;
+  top:auto !important; left:auto !important; transform:none !important;
   width:100%;
-  max-width:700px;
+  max-width: var(--form-max);
   margin:0 auto;
   padding:0 12px;
   text-align:center;
 }
-#seccion-registro,#seccion-login{
-  max-width:560px;
+
+/* Formularios idénticos (registro y login) */
+#seccion-registro, #seccion-login{
+  width:100%;
+  max-width: var(--form-max);
   min-width:280px;
   margin:0 auto;
 }
-
-/* QR sin deformación */
-.qr-box{ text-align:center; }
-.qr-box,
-.qr-box img{ height:auto !important; }
-.qr-box img{
+#seccion-registro form, #seccion-login form{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  width:100%;
+  max-width: var(--form-max);
+  margin:0 auto;
+}
+#seccion-registro form :is(input,select,button,textarea),
+#seccion-login  form :is(input,select,button,textarea){
   display:block;
   width:100%;
   max-width:100%;
-  object-fit:contain;
-  border-radius:12px;
-}
-.qr-box .qr-caption{
-  color:#553071;
-  font-weight:600;
-  line-height:1.25;
-  margin-top:6px;
-  font-size:13px;
+  padding:10px 12px;
 }
 
-/* Regalo (canvas) */
+/* Ojo/contraseña */
+.input-con-ojo{ position:relative; width:100%; }
+.input-con-ojo input{ width:100%; padding-right:40px; }
+.boton-ojo{ position:absolute; right:10px; top:50%; transform:translateY(-50%); }
+
+/* ===== Fila usuario + dominio (alto parejo, sin recortes) ===== */
+#seccion-usuario .correo-container{
+  display:flex; gap:8px; width:100%; min-width:0; align-items:stretch; line-height:normal;
+}
+#seccion-usuario .correo-container > *{
+  flex:1 1 0; min-width:0; box-sizing:border-box;
+  font-size:16px; line-height:1.25;
+  height:auto !important; min-height:44px;      /* tap target móvil */
+  padding:10px 12px; border:1px solid #ccc; border-radius:8px;
+  transform:none !important;
+}
+#seccion-usuario .correo-container input{ flex:2 1 0; }
+#seccion-usuario .correo-container select{
+  flex:1 1 0;
+  appearance:auto !important;
+  -webkit-appearance:menulist !important;
+  background:#fff !important;
+  padding-right:28px !important;                /* espacio flecha nativa */
+  overflow:visible !important;
+}
+#seccion-usuario .correo-container select::before,
+#seccion-usuario .correo-container select::after{ content:none !important; }
+
+/* ===== QR sin deformación ===== */
+.qr-box{ text-align:center; }
+.qr-box, .qr-box img{ height:auto !important; }
+.qr-box img{ display:block; width:100%; max-width:100%; object-fit:contain; border-radius:12px; }
+.qr-box .qr-caption{ color:#553071; font-weight:600; line-height:1.25; margin-top:6px; font-size:13px; }
+
+/* ===== Regalo (canvas): animación SÍ, zoom NO ===== */
 #gift1.gift-anim canvas{
-  width:100%;
-  height:auto;
-  aspect-ratio:1/1;
+  width:100%; height:auto; aspect-ratio:1/1;
+  pointer-events:none !important; touch-action:auto !important;
 }
 
-/* Ocultar QR/Regalo dentro de la app (post-login) */
-.in-app .qr-box,
-.in-app #gift1{ display:none !important; }
+/* Dentro de la app puedes ocultar QR/Regalo si quieres */
+.in-app .qr-box, .in-app #gift1{ display:none !important; }
 
-/* =========================================
-   < 1200px — Apilado: QR → Form → Regalo
-========================================= */
-.login-stack{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:12px;
-  max-width:900px;
-  margin:0 auto;
-  padding:0 16px;
-}
-
-/* Orden */
-.qr-box{ order:1; }
-#usuario{ order:2; width:100%; }
-#gift1.gift-anim{
-  order:3;
-  width:min(88vw,360px);
-  margin:10px auto 20px;
-  text-align:center;
-}
-
-/* tamaños cómodos en móvil/tablet y nada fixed */
+/* ===== <1200 px: una columna limpia en todas las vistas ===== */
+/* ===== FIX <1200: 1 columna centrada + sin hueco arriba ===== */
 @media (max-width:1199.98px){
-  .qr-box{
-    width:clamp(110px,22vw,160px) !important;
-    margin:12px auto 6px !important;
-    position:static !important;
-    inset:auto !important;
-    transform:none !important;
-    z-index:auto !important;
-    pointer-events:auto !important;
-  }
-  #gift1.gift-anim{
-    position:static !important;
-    inset:auto !important;
-    transform:none !important;
-    z-index:auto !important;
-    pointer-events:auto !important;
-  }
-  .login-stack .hero-banner{
-    width:100%;
-    max-width:720px;
-    margin:8px auto;
-    position:relative;
-    z-index:1;
-  }
-  #seccion-registro,#seccion-login{ overflow:visible; }
-}
 
-/* =========================================
-   ≥ 1200px — QR/Regalo fijos y centrados
-========================================= */
+  /* La vista activa: grid en columna, centrada y pegada arriba */
+  .vista[style*="display: block"],
+  .vista.activa{
+    
+    grid-auto-flow: row;
+    justify-items: center;    /* centra horizontalmente los hijos */
+    align-content: start;     /* evita hueco arriba */
+    gap: 12px;
+    padding: 12px 16px;       /* ajusta si quieres más/menos padding */
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  /* Carril centrado SOLO para bloques clave (no todo) */
+  :root{ --carril: 720px; }            /* súbelo si quieres más ancho */
+  .vista[style*="display: block"] .tarjeta-resumen,
+  .vista[style*="display: block"] .filtros,
+  .vista[style*="display: block"] .lista,
+  .vista[style*="display: block"] .grafico-contenedor,
+  .vista[style*="display: block"] form{
+   
+    width: 100%;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box;
+  }
+
+  /* 💥 Quita el gran espacio: cualquier primer bloque SIN margen arriba */
+  .vista[style*="display: block"] > :first-child{
+    margin-top: 0 !important;
+  }
+  /* Y por si esos bloques traen márgenes propios */
+  .vista[style*="display: block"] .tarjeta-resumen,
+  .vista[style*="display: block"] .filtros,
+  .vista[style*="display: block"] .lista,
+  .vista[style*="display: block"] .grafico-contenedor,
+  .vista[style*="display: block"] form{
+    margin-top: 0;
+  }
+
+  /* Orden deseado en móvil/tabla: Tarjeta → Filtros → Lista → Gráfico al final */
+  .vista[style*="display: block"] .tarjeta-resumen { order: 1; }
+  .vista[style*="display: block"] .filtros         { order: 2; }
+  .vista[style*="display: block"] .lista           { order: 3; }
+  .vista[style*="display: block"] .grafico-contenedor { order: 99; }
+
+  /* 🧹 Anti-empujones típicos que rompen el centrado en <1200 */
+  .vista[style*="display: block"] .tarjeta-resumen,
+  .vista[style*="display: block"] .filtros,
+  .vista[style*="display: block"] .lista,
+  .vista[style*="display: block"] .grafico-contenedor{
+    float:none !important;
+    position:relative !important;
+    left:auto !important; right:auto !important;
+    transform:none !important;
+  }
+
+  /* Si algún contenedor principal metía padding a la izquierda, lo nivelamos */
+  #app, #contenido-app{
+    padding-left: 0 !important;
+  }}
+/* 📱 Tablet/Móvil: anula el “top” y el “fixed” */
+@media (max-width: 1199.98px){
+  .tarjeta-resumen.flotante{
+    position: static !important;  /* vuelve al flujo normal */
+    top: auto !important;         /* elimina el offset de 50px */
+    right: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+
+    /* opcional: centrada y con carril cómodo */
+    width: 100%;
+    max-width: 720px;
+    margin: 8px auto 12px;
+  }
+}
+@media (max-width:1199.98px){
+  /* Login en columna y centrado */
+  body:not(.in-app) .login-stack{
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    padding: 12px 16px !important;
+  }
+
+  /* QR ARRIBA (tamaño razonable) */
+  body:not(.in-app) .qr-box{
+    order: 1;
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    width: clamp(120px, 38vw, 200px) !important;
+    margin: 8px auto 0 !important;
+    text-align: center !important;
+  }
+  body:not(.in-app) .qr-box img{
+    width: 100%; height: auto; object-fit: contain; border-radius: 12px;
+  }
+
+  /* CONTENIDO (banner / formulario) queda en medio, sin huecotes */
+  body:not(.in-app) .login-stack > .hero-banner,
+  body:not(.in-app) .login-stack > #usuario{
+    order: 2;
+    margin: 0 auto !important;
+    max-width: 720px !important;
+    width: 100% !important;
+  }
+
+  /* REGALO AL FINAL (más pequeño) */
+  body:not(.in-app) #gift1.gift-anim{
+    order: 99;
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    width: clamp(240px, 70vw, 360px) !important;
+    margin: 12px auto 14px !important;
+    text-align: center !important;
+  }
+  body:not(.in-app) #gift1.gift-anim canvas{
+    width: 100% !important; height: auto !important; aspect-ratio: 1/1; max-width: 100%;
+  }
+}
 @media (min-width:1200px){
-  :root{
-    /* ajustables a tu gusto */
-    --qr-size: 132px;        /* 128–150px suele verse bien */
-    --qr-left: 96px;         /* separación izquierda del QR */
-    --qr-shift: -40px;       /* fino: + baja, - sube el QR */
-    --gift-w: min(480px,38vw);/* ancho del regalo */
-    --gift-shift: -70px;       /* fino: + baja, - sube el regalo */
+  /* Variables solo para login/portada */
+  body:not(.in-app){
+    --qr-left: 96px;
+    --qr-size: 132px;
+    --qr-shift: -40px;
+    --gift-w: min(480px, 38vw);
+    --gift-shift: -70px;
   }
 
-  /* QR fijo izq, centrado vertical */
-  .qr-box{
-    position:fixed !important;
-    left:var(--qr-left) !important;
-    top:calc(50vh - var(--qr-size)/2 + var(--qr-shift)) !important;
-    width:var(--qr-size) !important;
-    margin:0 !important;
-    z-index:3 !important;
-    text-align:center;
-  }
-  .qr-box img{ width:100%; margin:0; }
-  .qr-box .qr-caption{ font-size:14px; }
-
-  /* 🎁 Regalo fijo der, centrado vertical (alineado con el QR) */
-  #gift1.gift-anim{
-    position:fixed !important;
-    right:20px !important;
-    top:calc(50vh - var(--gift-w)/2 + var(--gift-shift)) !important;
-    width:var(--gift-w) !important;
-    margin:0 !important;
-    z-index:3 !important;
-    text-align:center !important;
+  /* QR a la IZQUIERDA */
+  body:not(.in-app) .qr-box{
+    position: fixed !important;
+    left: var(--qr-left) !important;
+    top: calc(50vh - var(--qr-size)/2 + var(--qr-shift)) !important;
+    width: var(--qr-size) !important;
+    margin: 0 !important;
+    z-index: 3 !important;
+    text-align: center !important;
   }
 
-  /* Centro con “colchón” para que nada se arrime */
-  .login-stack{
-    max-width:1200px;
-    padding-left: clamp(calc(var(--qr-left) + var(--qr-size) + 24px), 22vw, 320px);
-    padding-right: clamp(calc(20px + min(480px,38vw) + 24px), 40vw, 520px);
+  /* REGALO a la DERECHA */
+  body:not(.in-app) #gift1.gift-anim{
+    position: fixed !important;
+    right: 20px !important;
+    top: calc(50vh - var(--gift-w)/2 + var(--gift-shift)) !important;
+    width: var(--gift-w) !important;
+    margin: 0 !important;
+    z-index: 3 !important;
+    text-align: center !important;
   }
-  #seccion-usuario{ max-width:720px; margin:0 auto; }
+
+  /* El stack central se encoge entre ambos lados */
+  body:not(.in-app) .login-stack{
+    max-width: var(--form-max, 720px);
+    width: 100%;
+    margin-left: calc(var(--qr-left) + var(--qr-size) + 24px) !important;
+    margin-right: calc(20px + var(--gift-w) + 24px) !important;
+    padding: 0 !important;
+  }
 }
-
-/* —— Seguridad scroll/gestos —— */
-html,body{ overflow-y:auto; }
-body:not(.in-app){ touch-action:auto; }
