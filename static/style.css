@@ -468,6 +468,58 @@ form button,
 .barra-superior #btn-suscribirme:hover {
   background: #edb0f7 !important;
 }
+/* === Botón ❓ con el MISMO look que perfil/suscribirme === */
+.barra-superior #btn-ayuda-config{
+  display:inline-flex !important;
+  align-items:center; justify-content:center;
+
+  height:24px;
+  min-width:28px;
+  padding:2px 6px;
+  margin:0 4px 0 0;
+
+  line-height:1;
+  font-size:1rem;
+  border:0;
+  border-radius:10px;
+  cursor:pointer;
+
+  background-image: linear-gradient(to right, rgb(154,39,247), rgb(238,196,232)) !important;
+  background-color: transparent !important;
+  color:#fff !important;
+
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55),
+              0 4px 12px rgba(154,39,247,.25);
+  position: relative;               /* para el tooltip */
+  text-decoration: none !important; /* ancla sin subrayado */
+}
+
+/* Hover igual que los otros botones */
+.barra-superior #btn-ayuda-config:hover{
+  background:#edb0f7 !important;
+}
+
+/* ==== Tooltip “Ayuda” solo en dispositivos con hover (desktop) ==== */
+@media (hover:hover){
+  .barra-superior #btn-ayuda-config::after{
+    content: attr(data-tip);        /* usa data-tip="Ayuda" del HTML */
+    position: absolute;
+    top: calc(100% + 6px); right: 0;
+    background:#553071; color:#fff; font-size:12px;
+    padding:3px 6px; border-radius:6px; white-space:nowrap;
+    opacity:0; transform: translateY(-2px);
+    pointer-events:none;
+    transition: opacity .15s, transform .15s;
+    box-shadow: 0 4px 10px rgba(0,0,0,.15);
+  }
+  .barra-superior #btn-ayuda-config:hover::after,
+  .barra-superior #btn-ayuda-config:focus-visible::after{
+    opacity:1; transform: translateY(0);
+  }
+}
+
+/* (opcional) pequeño respiro a la derecha del botón de salir */
+#cerrar-sesion-barra{ margin-left:4px; }
 
 /* ================================
    HEADER
