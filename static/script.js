@@ -424,6 +424,14 @@ W.configPersonas          = configPersonas;
 W.configEgresosCategorias = configEgresosCategorias;
 W.configMediosPago        = configMediosPago;
 
+// === Estado GLOBAL (una vez) ===
+const State = {
+  cfg: null,     // configuración por usuario
+  IDX: {},       // índices id -> objeto (para mostrar emoji+label)
+  inited: false, // evita doble init
+};
+
+
 // === helpers compartidos para mes y disponible ===
 // --- Mes actual en formato YYYY-MM ---
 function mesActualYYYYMM() {
@@ -541,14 +549,70 @@ function disponibleMes(mesYYMM, done) {
 // =============================
 // HELPERs
 // =============================
+// === Helpers GLOBAL ===
+function genId(prefix='t_'){
+  if (crypto?.getRandomValues){
+    const b=new Uint8Array(9); crypto.getRandomValues(b);
+    return prefix + Array.from(b, x=>x.toString(36).padStart(2,'0')).join('').slice(0,12);
+  }
+  return prefix + (Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-4));
+}
+
+function ensureIds(list, pfx='t_', pfxChild='s_'){
+  if(!Array.isArray(list)) return [];
+  for(const it of list){
+    if(!it.id) it.id=genId(pfx);
+    (it.children||[]).forEach(ch=>{ if(!ch.id) ch.id=genId(pfxChild); });
+  }
+  return list;
+}
+// Separa emoji inicial (si hay) del texto visible
+function parseEmojiLabel(txt){
+  const m = String(txt||'').match(/^\p{Extended_Pictographic}/u);
+  const emoji = m ? m[0] : '';
+  const label = emoji ? String(txt).replace(/^\p{Extended_Pictographic}\s*/u,'').trim()
+                      : String(txt||'');
+  return { emoji, label };
+}
+
+// ÚNICA función reutilizable (Bills/Ingresos/Egresos/Pagos)
+function rellenarSelectTextoConDataId(selectEl, listaTextos, placeholder, prefix='t_'){
+  if(!selectEl) return;
+  const opts = [];
+  if (placeholder) opts.push(`<option value="">${placeholder}</option>`);
+  for (const txt of (listaTextos || [])){
+    const m = String(txt||'').match(/^\p{Extended_Pictographic}/u);
+    const emoji = m ? m[0] : '';
+    const label = emoji ? String(txt).replace(/^\p{Extended_Pictographic}\s*/u,'').trim()
+                        : String(txt||'');
+    const dataId = genId(prefix);
+    const vis = `${emoji ? emoji+' ' : ''}${label}`;
+    opts.push(`<option value="${txt}" data-id="${dataId}">${vis}</option>`);
+  }
+  selectEl.innerHTML = opts.join('');
+}
+
+// Fechas seguras (sin timezone)
+function fechaDMY(ymd){
+  if(!ymd) return ''; const [y,m,d]=String(ymd).slice(0,10).split('-'); return `${d}/${m}/${y}`;
+}
+
+// Índice por id (para lookups emoji+label)
+function indexById(list){ const m=new Map(); (list||[]).forEach(x=>m.set(x.id,x)); return m; }
+function displayLabel(map, id){ const it=map.get(id); return it ? `${it.emoji||''} ${it.label}`.trim() : (id||''); }
+
+// Si no viene con ese patrón, caemos al formateo clásico pero a mediodía local.
 function formatoLegible(fechaRaw) {
   if (!fechaRaw) return "sin fecha";
-  const d = new Date(fechaRaw);
-  if (isNaN(d)) return fechaRaw;
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
+  const s = String(fechaRaw).slice(0, 10);      // por si venía con hora
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split("-");
+    return `${d}/${m}/${y}`;
+  }
+  // fallback para otros formatos: “anclar” a 12:00 local evita -1 día
+  const d = new Date(s + "T12:00:00");
+  return isNaN(d) ? s : new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit", month: "2-digit", year: "numeric"
   }).format(d);
 }
 
@@ -853,6 +917,118 @@ function limpiarYRepoblarSelects(cfgArg) {
   // notificar al resto
   if (typeof actualizarSelectsVistas === "function") actualizarSelectsVistas("todos");
 }
+async function loadUserConfig(){
+  if (State.cfg) return State.cfg; // cache
+  const res = await fetch('/api/config', {credentials:'include'});
+  State.cfg = await res.json();
+
+  // Asegura IDs en cada bloque del user
+  State.cfg.bills_conf        = ensureIds(State.cfg.bills_conf,        't_','s_');
+  State.cfg.egresos_conf      = ensureIds(State.cfg.egresos_conf,      'c_','sc_');
+  State.cfg.medios_pago       = ensureIds(State.cfg.medios_pago,       'm_','sm_');
+  State.cfg.ingresos_fuentes  = ensureIds(State.cfg.ingresos_fuentes,  'f_','sf_');
+  State.cfg.personas          = ensureIds(State.cfg.personas,          'p_','');
+
+  // Índices para mostrar bonito
+  State.IDX = {
+    bills:   indexById(State.cfg.bills_conf),
+    egCat:   indexById(State.cfg.egresos_conf),
+    medios:  indexById(State.cfg.medios_pago),
+    fuentes: indexById(State.cfg.ingresos_fuentes),
+    personas:indexById(State.cfg.personas),
+  };
+
+  // (Opcional) persistir config saneada con nuevos IDs:
+  // await fetch('/api/config', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(State.cfg)});
+
+  return State.cfg;
+}
+function fillSelect(sel, items){
+  if(!sel) return;
+  sel.innerHTML = (items||[])
+    .map(it => `<option value="${it.id}">${(it.emoji||'')} ${it.label}</option>`)
+    .join('');
+}
+
+// Bills
+function initBillsSelects(){
+  const tipoSel = document.getElementById('bill-tipo');
+  const subSel  = document.getElementById('bill-subtipo');
+  if(!tipoSel) return;
+  fillSelect(tipoSel, State.cfg.bills_conf);
+  function renderSubs(id){
+    const tipo = State.cfg.bills_conf.find(t=>t.id===id);
+    fillSelect(subSel, tipo?.children || []);
+  }
+  renderSubs(tipoSel.value);
+  tipoSel.addEventListener('change', e=>renderSubs(e.target.value), {once:false});
+}
+
+// Egresos
+function initEgresosSelects(){
+  fillSelect(document.getElementById('categoria-egreso'),  State.cfg.egresos_conf);
+  fillSelect(document.getElementById('medio-egreso'),      State.cfg.medios_pago);
+  fillSelect(document.getElementById('egreso-persona'),    State.cfg.personas);
+  // subcategorías dependientes
+  const catSel = document.getElementById('categoria-egreso');
+  const subSel = document.getElementById('subcategoria-egreso');
+  if(catSel && subSel){
+    const render = id=>{
+      const cat = State.cfg.egresos_conf.find(c=>c.id===id);
+      fillSelect(subSel, cat?.children || []);
+    };
+    render(catSel.value);
+    catSel.addEventListener('change', e=>render(e.target.value), {once:false});
+  }
+}
+
+// Ingresos
+function initIngresosSelects(){
+  fillSelect(document.getElementById('ingreso-fuente'), State.cfg.ingresos_fuentes);
+}
+
+// Pagos
+function initPagosSelects(){
+  fillSelect(document.getElementById('pago-medio'),    State.cfg.medios_pago);
+  fillSelect(document.getElementById('pago-persona'),  State.cfg.personas);
+}
+function bindBillsForm(){
+  const form = document.getElementById('form-bills');
+  if(!form || form._bound) return; form._bound = true;  // evita doble binding al cambiar de vista
+  form.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const payload = {
+      fecha:  document.getElementById('bill-fecha').value,
+      monto:  Number(document.getElementById('bill-monto').value),
+      tipo_id: document.getElementById('bill-tipo').value,
+      subtipo_id: document.getElementById('bill-subtipo')?.value || null,
+    };
+    await fetch('/api/bills', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    // refresca tu lista aquí…
+  });
+}
+
+function bindEgresosForm(){
+  const form = document.getElementById('form-egresos');
+  if(!form || form._bound) return; form._bound = true;
+  form.addEventListener('submit', async e=>{
+    e.preventDefault();
+    const payload = {
+      fecha:  document.getElementById('egreso-fecha').value,
+      monto:  Number(document.getElementById('egreso-monto').value),
+      categoria_id:   document.getElementById('categoria-egreso').value,
+      subcategoria_id:document.getElementById('subcategoria-egreso')?.value || null,
+      medio_id:       document.getElementById('medio-egreso').value,
+      submedio_id:    document.getElementById('submedio-egreso')?.value || null,
+      persona_id:     document.getElementById('egreso-persona')?.value || null,
+      nota:           document.getElementById('egreso-nota')?.value || null,
+    };
+    await fetch('/api/egresos', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    // refresca…
+  });
+}
+
+
 
 // =============================
 // LIMPIEZA DE LISTAS / FILTROS / CHARTS
@@ -2301,38 +2477,56 @@ function rellenarSelect(select, opciones, placeholder = "Seleccionar") {
 }
 
 // ==============================
-// ACTUALIZAR SELECTS DE TODAS LAS VISTAS
+// ACTUALIZAR SELECTS DE TODAS LAS VISTAS (con FILTROS)
 // ==============================
 function actualizarSelectsVistas(vista = "todos") {
   console.log("DEBUG: actualizarSelectsVistas()", vista);
 
-  // ======================================
+  // ==========================
   // INGRESOS
-  // ======================================
+  // ==========================
   if (vista === "todos" || vista === "ingresos") {
-  const selectIngresos = document.getElementById("fuente-ingreso");
-  const filtroFuenteIngreso = document.getElementById("filtro-fuente-ingreso");
+    const selectIngresos       = document.getElementById("fuente-ingreso");
+    const filtroFuenteIngreso  = document.getElementById("filtro-fuente-ingreso");
+    const listaFuentes = (configFuentesIngresos || []);
 
-  rellenarSelect(selectIngresos, configFuentesIngresos, "Selecciona fuente");
-  rellenarSelect(filtroFuenteIngreso, configFuentesIngresos, "Todas");
-}
+    // ⬇️ Reemplaza estas dos llamadas:
+    // rellenarSelect(selectIngresos, configFuentesIngresos, "Selecciona fuente");
+    // rellenarSelect(filtroFuenteIngreso, configFuentesIngresos, "Todas");
 
-  // ======================================
+    // ✅ Por estas (con data-id y prefijo f_):
+    if (selectIngresos)
+      rellenarSelectTextoConDataId(selectIngresos,      listaFuentes, "Selecciona fuente", 'f_');
+    if (filtroFuenteIngreso)
+      rellenarSelectTextoConDataId(filtroFuenteIngreso, listaFuentes, "Todas",            'f_');
+  }
+
+  // ==========================
   // BILLS
-  // ======================================
-  if (vista === "todos" || vista === "bills") {
+  // ==========================
+    if (vista === "todos" || vista === "bills") {
     const selectTipoBill = document.getElementById("bill-tipo");
     const filtroTipoBill = document.getElementById("filtro-tipo-bill");
 
-    rellenarSelect(selectTipoBill, configBills.map(b => b.nombre), "Selecciona tipo");
-    rellenarSelect(filtroTipoBill, configBills.map(b => b.nombre), "Todos");
+    const listaBillsTexto = (configBills || []).map(b => b.nombre); // igual que antes
 
-    // Personas en BILLS (checkbox)
+    if (selectTipoBill) {
+      // antes: rellenarSelect(selectTipoBill, listaBillsTexto, "Selecciona tipo");
+      rellenarSelectTextoConDataId(selectTipoBill, listaBillsTexto, "Selecciona tipo");
+    }
+    if (filtroTipoBill) {
+      // antes: rellenarSelect(filtroTipoBill, listaBillsTexto, "Todos");
+      rellenarSelectTextoConDataId(filtroTipoBill, listaBillsTexto, "Todos");
+    }
+
+    // Personas (checkboxes) en BILLS
     const personasContainer = document.getElementById("bill-personas-lista");
     if (personasContainer) {
       personasContainer.innerHTML = "";
-      configPersonas.forEach(persona => {
-        const idSeguro = persona.nombre.replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+      (configPersonas || []).forEach(persona => {
+        const idSeguro = String(persona.nombre || "")
+          .replace(/\s+/g, "-")
+          .replace(/[^\w-]/g, "");
         personasContainer.innerHTML += `
           <div class="fila-bill">
             <label>
@@ -2347,28 +2541,52 @@ function actualizarSelectsVistas(vista = "todos") {
     }
   }
 
-  // ======================================
+  // ==========================
   // EGRESOS
-  // ======================================
+  // ==========================
   if (vista === "todos" || vista === "egresos") {
-    const selectCategoria = document.getElementById("categoria-egreso");
-    const filtroCategoria = document.getElementById("filtro-categoria-egreso");
-    rellenarSelect(selectCategoria, configEgresosCategorias.map(c => c.categoria), "Seleccionar");
-    rellenarSelect(filtroCategoria, configEgresosCategorias.map(c => c.categoria), "Todas");
+    const selectCategoria     = document.getElementById("categoria-egreso");
+    const filtroCategoria     = document.getElementById("filtro-categoria-egreso");
+    const selectMedioEgreso   = document.getElementById("medio-egreso");
+    const filtroMedioEgreso   = document.getElementById("filtro-medio-egreso"); // si existe en tu HTML
 
-    const selectMedioEgreso = document.getElementById("medio-egreso");
-    rellenarSelect(selectMedioEgreso, configMediosPago.map(m => m.medio), "Seleccionar medio");
+    if (selectCategoria) {
+      rellenarSelect(
+        selectCategoria,
+        (configEgresosCategorias || []).map(c => c.categoria),
+        "Seleccionar"
+      );
+    }
+    if (filtroCategoria) {
+      rellenarSelect(
+        filtroCategoria,
+        (configEgresosCategorias || []).map(c => c.categoria),
+        "Todas"
+      );
+    }
+    if (selectMedioEgreso) {
+      rellenarSelect(selectMedioEgreso, (configMediosPago || []).map(m => m.medio), "Seleccionar medio");
+    }
+    if (filtroMedioEgreso) {
+      rellenarSelect(filtroMedioEgreso, (configMediosPago || []).map(m => m.medio), "Todos");
+    }
   }
 
-  // ======================================
+  // ==========================
   // PAGOS
-  // ======================================
-
-    if (vista === "todos" || vista === "pagos") {
-      // En lugar de rellenar uno por uno con los arrays globales,
-      // usamos lo seleccionado en el modal:
+  // ==========================
+  if (vista === "todos" || vista === "pagos") {
+    // Si ya tienes una función que rellena todo en Pagos, úsala:
+    if (typeof rellenarSelectsPagos === "function") {
       rellenarSelectsPagos();
+    } else {
+      // fallback mínimo (ajusta si tus IDs difieren)
+      const sMedio   = document.getElementById("pago-medio");
+      const sPersona = document.getElementById("pago-persona");
+      if (sMedio)   rellenarSelect(sMedio,   (configMediosPago || []).map(m => m.medio), "Seleccionar medio");
+      if (sPersona) rellenarSelect(sPersona, (configPersonas  || []).map(p => p.nombre), "Seleccionar persona");
     }
+  }
 }
 
 // =============================
@@ -3642,87 +3860,102 @@ async function cargarIngresos({ firstRender = true } = {}) {
 }
 
 
- // ------------------------------
-// Submit (alta/edición) con optimista
-// ------------------------------
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
+// ===============================
+// Ingresos: submit (alta/edición) con optimista + fuente_id
+// ===============================
+const formIngresos = document.getElementById('form-ingresos');
 
-  const fecha  = document.getElementById("fecha-ingreso")?.value;
-  const monto  = parseFloat(document.getElementById("monto-ingreso")?.value || 0);
-  const fuente = (selectFuente?.value || "").trim();
-  const nota   = document.getElementById("nota-ingreso")?.value || "";
+if (formIngresos && !formIngresos.dataset.bound) {   // 🔒 evita doble binding
+  formIngresos.dataset.bound = "1";
 
-  // Validación de fuente SOLO desde Config (normalizada)
-  const fuentesValidasArr =
-    (Array.isArray(W.configFuentesIngresos) && W.configFuentesIngresos.length
-      ? W.configFuentesIngresos
-      : (Array.isArray(W.configTemporal?.ingresos_fuentes)
-          ? W.configTemporal.ingresos_fuentes
-          : []
-        )
+  formIngresos.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const fecha  = document.getElementById("fecha-ingreso")?.value;
+    const monto  = parseFloat(document.getElementById("monto-ingreso")?.value || 0);
+    const fuente = (selectFuente?.value || "").trim();      // ✅ usa el selectFuente ya declarado
+    const nota   = document.getElementById("nota-ingreso")?.value || "";
+
+    // id opaco del option seleccionado
+    const optFuente = selectFuente?.options?.[selectFuente.selectedIndex];
+    const fuente_id = optFuente?.dataset?.id || null;
+
+    // Validación contra Config (igual que tenías)
+    const fuentesValidasArr =
+      (Array.isArray(window.configFuentesIngresos) && window.configFuentesIngresos.length
+        ? window.configFuentesIngresos
+        : (Array.isArray(window.configTemporal?.ingresos_fuentes)
+            ? window.configTemporal.ingresos_fuentes
+            : []
+          )
+      );
+
+    const setFuentes = new Set(
+      (fuentesValidasArr || []).map(s => String(s).trim().toLowerCase()).filter(Boolean)
     );
-  const setFuentes = new Set(
-    (fuentesValidasArr || []).map(s => String(s).trim().toLowerCase()).filter(Boolean)
-  );
 
-  const fuenteNorm = String(fuente).toLowerCase().trim();
-  if (!fecha || isNaN(monto) || monto <= 0 || !fuente || !setFuentes.has(fuenteNorm)) {
-    alert("Por favor completa los campos y selecciona una fuente válida desde Configuración.");
-    return;
-  }
+    const fuenteNorm = String(fuente).toLowerCase().trim();
+    if (!fecha || isNaN(monto) || monto <= 0 || !fuente || !setFuentes.has(fuenteNorm)) {
+      alert("Por favor completa los campos y selecciona una fuente válida desde Configuración.");
+      return;
+    }
 
-  const nuevoIngreso = { fecha, monto, fuente, nota };
-  const editIndex = form.dataset.editIndex;
-  let agregadoIndex;
+    // Payload con fuente_id (compat total)
+    const nuevoIngreso = { fecha, monto, fuente, fuente_id, nota };
 
-  if (editIndex !== undefined && editIndex !== "") {
-    W.ingresos[editIndex] = nuevoIngreso;
-    agregadoIndex = Number(editIndex);
-    delete form.dataset.editIndex;
-    form.querySelector("button[type='submit']").textContent = "💾 Guardar Ingreso";
-    W.toastOk?.("✅ Ingreso actualizado");
-  } else {
-    W.ingresos.push(nuevoIngreso); // optimista
-    agregadoIndex = W.ingresos.length - 1;
-    W.toastOk?.("✅ Ingreso guardado");
-  }
-  
-  // Pintar
-  mostrarIngresos();
-  setTimeout(mostrarIngresos, 0); // doble repaint por si otro bloque reescribe
+    // Optimista
+    const editIndex = formIngresos.dataset.editIndex;
+    let agregadoIndex;
+    if (editIndex !== undefined && editIndex !== "") {
+      window.ingresos[editIndex] = nuevoIngreso;
+      agregadoIndex = Number(editIndex);
+      delete formIngresos.dataset.editIndex;
+      formIngresos.querySelector("button[type='submit']").textContent = "💾 Guardar Ingreso";
+      window.toastOk?.("✅ Ingreso actualizado");
+    } else {
+      window.ingresos.push(nuevoIngreso);
+      agregadoIndex = window.ingresos.length - 1;
+      window.toastOk?.("✅ Ingreso guardado");
+    }
 
-  // Guardar en servidor y reconciliar
-  fetch('/guardar_ingreso', {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(nuevoIngreso)
-  })
-    .then(async (res) => {
+    // Pintar rápido
+    mostrarIngresos();
+    setTimeout(mostrarIngresos, 0);
+
+    // Guardar en servidor y reconciliar
+    try {
+      const res = await fetch('/guardar_ingreso', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevoIngreso)
+      });
+
       let data = null;
       try { data = await res.json(); } catch {}
       if (!res.ok || data?.ok === false) {
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
 
-      // Reemplaza el optimista por la versión del server (si viene normalizada)
-      if (data && typeof agregadoIndex === "number" && data.fecha) {
-        W.ingresos[agregadoIndex] = data;
+      // Acepta respuesta directa o { ingreso: {...} }
+      const serverIngreso = data?.ingreso || data;
+
+      if (serverIngreso && typeof agregadoIndex === "number" && serverIngreso.fecha) {
+        window.ingresos[agregadoIndex] = serverIngreso;
       }
 
       mostrarIngresos();
-      form.reset();
-      if (selectFuente) selectFuente.value = ""; // volver a "Selecciona fuente"
-    })
-    .catch(err => {
+      formIngresos.reset();
+      if (selectFuente) selectFuente.value = ""; // vuelve al placeholder
+
+    } catch (err) {
       console.error("Error al guardar ingreso:", err);
-      // Se mantiene el optimista; avisamos
-      W.toastErr?.("⚠️ No se pudo guardar en el servidor. Quedó localmente.");
+      window.toastErr?.("⚠️ No se pudo guardar en el servidor. Quedó localmente.");
       mostrarIngresos();
-    });
-});
-});
-// Ordenar por fecha DESC (YYYY-MM-DD funciona directo con localeCompare)
+    }
+  });
+}
+
+// (Opcional) util para ordenar por fecha DESC si la usas
 const byFechaDesc = (a, b) =>
   String(b?.fecha || '').slice(0,10).localeCompare(String(a?.fecha || '').slice(0,10));
 
@@ -3858,15 +4091,19 @@ function actualizarGraficoIngresos(data) {
   });
 }
 
-// -----------------------------------
-//  Editar / Eliminar
-// -----------------------------------
-W.editarIngreso = function (index) {
-  const i = (W.ingresos || [])[index];
-  if (!i) return;
+  // -----------------------------------
+  //  Editar / Eliminar
+  // -----------------------------------
+  W.editarIngreso = function (index) {
+    const i = (W.ingresos || [])[index];
+    if (!i) return;
 
-  // refresca opciones por si la config cambió
-  if (typeof W.llenarSelectFuentesIngresos === "function") llenarSelectFuentesIngresos();
+    // refresca opciones por si la config cambió
+  if (typeof W.llenarSelectFuentesIngresos === "function") {
+    W.llenarSelectFuentesIngresos();
+  } else if (typeof llenarSelectFuentesIngresos === "function") {
+    llenarSelectFuentesIngresos();
+  }
 
   document.getElementById("fecha-ingreso").value = i.fecha;
   document.getElementById("monto-ingreso").value = i.monto;
@@ -3918,7 +4155,7 @@ W.eliminarIngreso = function (index) {
       W.toastErr?.("❌ No se pudo eliminar el ingreso");
     });
 };
-
+});
 // =============================
 // MANEJO DE BILLS 
 // =============================
@@ -4057,48 +4294,47 @@ form.addEventListener("submit", e => {
     return;
   }
 
-  // 1) Participantes: los del bill configurado + el dueño (apodo)
+  // ⭐️ NUEVO: tomamos el id opaco del option seleccionado (si existe)
+  const optSel  = tipoSelect.options[tipoSelect.selectedIndex];
+  const tipo_id = optSel?.dataset?.id || null;
+
+  // 1) Participantes…
   const owner = ownerDisplay();
   const billConfig = configBills.find(b => b.nombre === tipo);
 
-// personas válidas actuales
   const actuales = new Set(configPersonas.map(p => p.nombre.trim().toLowerCase()));
-
-// solo personas que aún existen en Config > Personas
   const base = (billConfig?.personas || [])
-  .map(n => String(n).trim())
-  .filter(n => actuales.has(n.toLowerCase()))
-  .map(n => (n.toLowerCase() === 'dueño' || n.toLowerCase() === 'dueno') ? owner : n);
+    .map(n => String(n).trim())
+    .filter(n => actuales.has(n.toLowerCase()))
+    .map(n => (n.toLowerCase() === 'dueño' || n.toLowerCase() === 'dueno') ? owner : n);
 
-// agregar dueño y dejar únicos
   const participantes = [...new Set([...base, owner].filter(Boolean))];
+  if (participantes.length === 0) {
+    alert("No hay personas configuradas para este bill.");
+    return;
+  }
 
-    if (participantes.length === 0) {
-      alert("No hay personas configuradas para este bill.");
-      return;
-    }
-
-  // 2) Divido y construyo montos
+  // 2) Montos
   const porPersona = monto / participantes.length;
   const montos = {};
   participantes.forEach(nombre => { montos[nombre] = porPersona; });
 
-  const nuevoBill = { fecha, tipo, monto, montos };
+  // ⭐️ NUEVO: incluimos nombre (compat) y tipo_id (opaco)
+  const nuevoBill = { fecha, tipo, nombre: tipo, tipo_id, monto, montos };
+
   bills.push(nuevoBill);
 
   fetch("/guardar_bills", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(nuevoBill)
-})
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(nuevoBill)
+  })
   .then(async (res) => {
-    // tolera respuestas sin JSON y valida HTTP
     let data = null;
     try { data = await res.json(); } catch {}
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     if (!data?.bill) throw new Error("Respuesta inválida del servidor");
 
-    // Reconciliar optimista: reemplaza el último si era el mismo, si no, push
     if (bills.length && bills[bills.length - 1] === nuevoBill) {
       bills[bills.length - 1] = data.bill;
     } else {
@@ -4111,22 +4347,13 @@ form.addEventListener("submit", e => {
   })
   .catch((err) => {
     console.error("Error al guardar bill:", err);
-
-    // Revertir optimista si corresponde
     if (bills.length && bills[bills.length - 1] === nuevoBill) {
       bills.pop();
       mostrarBills();
     }
-
     W.toastErr?.("❌ No se pudo guardar el bill");
   });
 });
-  // =============================
-  // Filtros
-  // =============================
-  [filtroMes, filtroTipo, buscador].forEach(filtro => {
-    filtro.addEventListener("input", mostrarBills);
-  });
 
 // =============================
 // Mostrar bills

@@ -1058,29 +1058,66 @@ def guardar_ingreso():
         return auth
     uid = auth["id"]
 
-    data = request.get_json(force=True, silent=True) or {}
+    data   = request.get_json(force=True, silent=True) or {}
     fecha  = (data.get("fecha") or "").strip()
     monto  = data.get("monto")
     fuente = (data.get("fuente") or "").strip()
     nota   = (data.get("nota") or "").strip()
+    # 👇 NUEVO: aceptar fuente_id si viene bien formado (opcional)
+    fuente_id = data.get("fuente_id")
+    if not (isinstance(fuente_id, str) and (fuente_id.startswith("f_") or fuente_id.startswith("t_"))):
+        fuente_id = None
+
     if not fecha or monto is None or not fuente:
         return json_error("Campos requeridos: fecha, monto, fuente", 400)
 
     try:
         with engine.begin() as conn:
-            row = conn.execute(text("""
-                INSERT INTO public.ingresos (user_id, fecha, monto, fuente, nota, created_at)
-                VALUES (:u, :fe, :mo, :fu, :no, now())
-                RETURNING id, fecha, monto, fuente, nota
-            """), {"u": uid, "fe": fecha, "mo": monto, "fu": fuente, "no": nota}).first()
-        d = row_to_dict(row)
-        return jsonify({
-            "id": d["id"],
-            "fecha": d["fecha"].isoformat() if d["fecha"] else None,
-            "monto": float(d["monto"] or 0),
-            "fuente": d["fuente"],
-            "nota": d["nota"],
-        })
+            # ¿La tabla tiene columna fuente_id?
+            has_fuente_id = conn.execute(text("""
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM information_schema.columns
+                  WHERE table_schema='public'
+                    AND table_name='ingresos'
+                    AND column_name='fuente_id'
+                )
+            """)).scalar()
+
+            if has_fuente_id:
+                sql = """
+                  INSERT INTO public.ingresos
+                    (user_id, fecha, monto, fuente, nota, fuente_id, created_at)
+                  VALUES
+                    (:u, :fe, :mo, :fu, :no, :fid, now())
+                  RETURNING id, fecha, monto, fuente, nota, fuente_id
+                """
+                params = {"u": uid, "fe": fecha, "mo": monto, "fu": fuente, "no": nota, "fid": fuente_id}
+            else:
+                sql = """
+                  INSERT INTO public.ingresos
+                    (user_id, fecha, monto, fuente, nota, created_at)
+                  VALUES
+                    (:u, :fe, :mo, :fu, :no, now())
+                  RETURNING id, fecha, monto, fuente, nota
+                """
+                params = {"u": uid, "fe": fecha, "mo": monto, "fu": fuente, "no": nota}
+
+            row = conn.execute(text(sql), params).mappings().first()
+
+        # Respuesta compacta (compatible con tu front actual)
+        resp = {
+            "id": row["id"],
+            "fecha": row["fecha"].isoformat() if row["fecha"] else None,
+            "monto": float(row["monto"] or 0),
+            "fuente": row.get("fuente"),
+            "nota": row.get("nota"),
+        }
+        if "fuente_id" in row.keys():
+            resp["fuente_id"] = row.get("fuente_id")
+
+        return jsonify(resp)
+
     except SQLAlchemyError as e:
         return json_error(str(e), 500)
 
@@ -1181,15 +1218,22 @@ def guardar_bills():
     notas    = (data.get("notas") or "").strip() or None
     total    = data.get("total")
 
+    # ⭐️ NUEVO: tipo_id opcional desde el front (solo si parece válido)
+    tipo_id = data.get("tipo_id")
+    if not (isinstance(tipo_id, str) and tipo_id.startswith("t_")):
+        tipo_id = None
+
     if not fecha or not nombre or monto is None:
         return json_error("Campos requeridos: fecha, nombre/tipo, monto", 400)
 
     try:
-        use_nombre = table_has("bills", "nombre")
-        use_userid = table_has("bills", "user_id")
+        use_nombre   = table_has("bills", "nombre")
+        use_userid   = table_has("bills", "user_id")
         has_personas = table_has("bills", "personas")
+        # ⭐️ NUEVO: ¿existe columna tipo_id en tu tabla?
+        has_tipo_id  = table_has("bills", "tipo_id")
 
-        name_col = "nombre" if use_nombre else "tipo"
+        name_col  = "nombre" if use_nombre else "tipo"
         owner_col = "user_id" if use_userid else "cliente"
 
         cols = [owner_col, "fecha", name_col, "monto", "montos"]
@@ -1199,6 +1243,11 @@ def guardar_bills():
             cols += ["personas", "notas", "total"]
             vals += [":pe", ":nt", ":to"]
 
+        # ⭐️ NUEVO: si la tabla tiene tipo_id, lo incluimos
+        if has_tipo_id:
+            cols.append("tipo_id")
+            vals.append(":tid")
+
         cols_str = ", ".join(cols)
         vals_str = ", ".join(vals)
 
@@ -1207,13 +1256,16 @@ def guardar_bills():
             VALUES ({vals_str}, now())
             RETURNING id, fecha, {name_col} AS nombre, monto, montos
                      {", personas, notas, total" if has_personas else ", NULL::text[] AS personas, NULL::text AS notas, NULL::numeric AS total"}
+                     {", tipo_id" if has_tipo_id else ""}
         """
 
         params = {
             "owner": uid if use_userid else email,
             "fe": fecha, "no": nombre, "mo": monto,
             "mt": json.dumps(montos, ensure_ascii=False),
-            "pe": personas, "nt": notas, "to": total
+            "pe": personas, "nt": notas, "to": total,
+            # ⭐️ NUEVO: param opcional
+            "tid": tipo_id,
         }
 
         with engine.begin() as conn:
@@ -1223,12 +1275,14 @@ def guardar_bills():
             "id": row["id"],
             "fecha": row["fecha"].isoformat() if row["fecha"] else None,
             "nombre": row["nombre"],
-            "tipo": row["nombre"],  # compat
+            "tipo": row["nombre"],  # compat frontend viejo
             "monto": float(row["monto"] or 0),
             "montos": row["montos"] or {},
             "personas": row.get("personas") or [],
             "notas": row.get("notas"),
             "total": float(row["total"]) if row.get("total") is not None else None,
+            # ⭐️ NUEVO: reflejamos tipo_id si la tabla lo tiene
+            "tipo_id": row.get("tipo_id") if "tipo_id" in row else None,
         }})
 
     except SQLAlchemyError as e:
