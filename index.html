@@ -53,28 +53,25 @@
 </div>
 
 <!-- Contenido de la app -->
- <div id="contenido-app" style="display: none;">
-    <div id="barra-superior" style="display:none;" class="barra-superior">
+<div id="contenido-app" style="display: none;">
+  <div id="barra-superior" style="display:none;" class="barra-superior">
     <div class="barra-izquierda">
-       <!-- 👤 Perfil: icon-only con tooltip -->
-      <button id="btn-perfil"
-              class="icon-btn"
-              type="button"
-              title="Perfil"
-              aria-label="Perfil">👤</button>
+      <!-- 👤 Perfil -->
+      <button id="btn-perfil" class="icon-btn" type="button" title="Perfil" aria-label="Perfil">👤</button>
       <button id="abrir-configuracion" class="btn-config" title="Configuración">⚙️</button>
 
-      <!-- 📞 fijo en el DOM -->
+      <!-- 📞 + 💵 fijos -->
       <div class="telefono-wrapper">
         <button id="btn-telefono" class="btn-telefono" type="button" title="Teléfono">📞</button>
         <div id="popover-telefono" class="popover-telefono" aria-hidden="true">
           <div class="tel-label">Teléfono</div>
           <div id="telefono-dueno-pop">—</div>
         </div>
-      <button id="btn-mini-disponible"
-        class="btn-telefono"
-        title="Disponible del mes"
-        aria-label="Disponible">💵</button>
+
+        <button id="btn-mini-disponible"
+                class="btn-telefono"
+                title="Disponible del mes"
+                aria-label="Disponible">💵</button>
       </div>
     </div>
 
@@ -612,7 +609,6 @@
 </div>
 
 </div>
-<!-- === /LOGIN / REGISTRO === -->
 </main>
 
 <!-- 1) Flags + versión (primero, para que el resto las lea) -->

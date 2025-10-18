@@ -2434,3 +2434,81 @@ html, body { margin:0; padding:0; overflow-x:hidden; }
     padding: 0 !important;
   }
 }
+/* Overlay */
+/* Overlay */
+.mini-disp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+/* Tarjeta */
+.mini-disp-card {
+  width: min(600px, 96%);
+  background: var(--card-bg, #fff);
+  color: var(--color-texto, #0f172a);              /* ← color de texto desde config */
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+  padding: 24px 22px 22px;
+  position: relative;
+  animation: miniDispIn .18s ease-out;
+}
+
+/* Línea de acento arriba (usa tu gradiente configurado) */
+.mini-disp-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 18px; right: 18px;
+  height: 6px; border-radius: 0 0 10px 10px;
+  background: linear-gradient(90deg, var(--btn-inicio, #9a27f7), var(--btn-fin, #e762d5));
+  opacity: .95;
+}
+
+/* Botón cerrar */
+.mini-disp-close {
+  position: absolute;
+  top: 10px; right: 12px;
+  border: 0; background: transparent;
+  font-size: 22px; cursor: pointer; line-height: 1;
+  color: color-mix(in oklab, var(--color-texto, #0f172a) 60%, #6b7280);
+}
+.mini-disp-close:hover { color: var(--color-texto, #0f172a); }
+
+/* Contenido (más grande) */
+.mini-disp-panel {
+  font-size: 18px;              /* ↑ tamaño base */
+  line-height: 1.55;
+}
+.mini-disp-panel strong { font-weight: 800; }
+.mini-disp-panel em { font-style: italic; opacity: .9; }
+
+/* Total destacado con color de acento configurable */
+.mini-disp-total {
+  font-size: 1.35rem;           /* ↑ tamaño del total */
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--btn-inicio, #9a27f7) 15%, #fff);
+  color: var(--color-acento, var(--btn-inicio, #9a27f7));
+}
+
+/* Animación */
+@keyframes miniDispIn {
+  from { transform: translateY(6px) scale(.985); opacity: 0; }
+  to   { transform: translateY(0)   scale(1);     opacity: 1; }
+}
+
+/* Accesibilidad */
+@media (prefers-reduced-motion: reduce) {
+  .mini-disp-card { animation: none; }
+}
+
+/* Móvil */
+@media (max-width: 420px) {
+  .mini-disp-panel { font-size: 19px; }
+  .mini-disp-total { font-size: 1.4rem; }
+}
