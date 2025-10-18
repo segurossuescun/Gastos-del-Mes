@@ -1354,48 +1354,69 @@ def cargar_egresos():
     except SQLAlchemyError as e:
         return json_error(str(e), 500)
 
-
 @app.post("/guardar_egreso")
 @require_active_subscription()
 def guardar_egreso():
     auth = require_auth()
-    if not isinstance(auth, dict): 
+    if not isinstance(auth, dict):
         return auth
     uid = auth["id"]
 
     data = request.get_json(force=True, silent=True) or {}
-    fecha = (data.get("fecha") or "").strip()
-    monto = data.get("monto")
-    categoria = data.get("categoria")
-    if isinstance(categoria, str):
-        categoria = categoria.strip()
-    else:
-        categoria = (categoria or "")
-    subcategoria = (data.get("subcategoria") or "").strip()
-    medio = (data.get("medio") or "").strip()
-    submedio = (data.get("submedio") or "").strip()
-    persona = (data.get("persona") or "").strip()
-    nota = (data.get("nota") or "").strip()
 
-    # Requisitos mínimos
+    fecha        = (data.get("fecha") or "").strip()
+    monto        = data.get("monto")
+    categoria    = (data.get("categoria") or "").strip()
+    categoria_id = (data.get("categoria_id") or "").strip() or None
+    subcategoria = (data.get("subcategoria") or "").strip()
+    medio        = (data.get("medio") or "").strip()
+    medio_id     = (data.get("medio_id") or "").strip() or None
+    submedio     = (data.get("submedio") or "").strip()
+    persona      = (data.get("persona") or "").strip()
+    nota         = (data.get("nota") or "").strip()
+
     if not fecha or monto is None or not categoria or not medio:
         return json_error("Campos requeridos: fecha, monto, categoria, medio", 400)
 
     try:
-        with engine.begin() as conn:
-            row = conn.execute(text("""
-                INSERT INTO public.egresos
-                  (user_id, fecha, monto, categoria, subcategoria, medio, submedio, persona, nota, created_at)
-                VALUES
-                  (:uid, :fe, :mo, :ca, :sc, :me, :sm, :pe, :no, NOW())
-                RETURNING id, fecha, monto, categoria, subcategoria, medio, submedio, persona, nota
-            """), {
-                "uid": uid, "fe": fecha, "mo": monto,
-                "ca": categoria, "sc": subcategoria, "me": medio, "sm": submedio,
-                "pe": persona, "no": nota
-            }).mappings().first()
+        # Detectar si existen columnas *_id
+        has_cat_id  = table_has("egresos", "categoria_id")
+        has_med_id  = table_has("egresos", "medio_id")
 
-        return jsonify({
+        cols = ["user_id", "fecha", "monto", "categoria", "subcategoria",
+                "medio", "submedio", "persona", "nota", "created_at"]
+        vals = [":uid", ":fe", ":mo", ":ca", ":sc",
+                ":me", ":sm", ":pe", ":no", "now()"]
+
+        if has_cat_id:
+            cols.insert(4, "categoria_id")    # tras "monto"
+            vals.insert(4, ":caid")
+        if has_med_id:
+            # después de medio
+            idx = cols.index("medio") + 1
+            cols.insert(idx, "medio_id")
+            vals.insert(idx, ":meid")
+
+        sql = f"""
+            INSERT INTO public.egresos ({", ".join(cols)})
+            VALUES ({", ".join(vals)})
+            RETURNING id, fecha, monto, categoria, subcategoria, medio, submedio, persona, nota
+            {", categoria_id" if has_cat_id else ""}
+            {", medio_id"     if has_med_id else ""}
+        """
+
+        params = {
+            "uid": uid, "fe": fecha, "mo": monto,
+            "ca": categoria, "sc": subcategoria,
+            "me": medio, "sm": submedio,
+            "pe": persona, "no": nota,
+            "caid": categoria_id, "meid": medio_id,
+        }
+
+        with engine.begin() as conn:
+            row = conn.execute(text(sql), params).mappings().first()
+
+        out = {
             "id": row["id"],
             "fecha": row["fecha"].isoformat() if row["fecha"] else None,
             "monto": float(row["monto"] or 0),
@@ -1405,10 +1426,14 @@ def guardar_egreso():
             "submedio": row["submedio"],
             "persona": row["persona"],
             "nota": row["nota"],
-        })
+        }
+        if has_cat_id: out["categoria_id"] = row.get("categoria_id")
+        if has_med_id: out["medio_id"]     = row.get("medio_id")
+
+        return jsonify(out)
+
     except SQLAlchemyError as e:
         return json_error(str(e), 500)
-
 
 @app.post("/eliminar_egreso")
 @require_active_subscription()
@@ -1466,30 +1491,88 @@ def cargar_pagos():
 @require_active_subscription()
 def guardar_pago():
     auth = require_auth()
-    if not isinstance(auth, dict): return auth
+    if not isinstance(auth, dict):
+        return auth
     uid = auth["id"]
+
     data = request.get_json(force=True, silent=True) or {}
-    bill = (data.get("bill") or "").strip()
-    monto = data.get("monto")
-    persona = (data.get("persona") or "").strip()
-    medio = (data.get("medio") or "").strip()
+
+    # Campos “snapshot” visibles
+    bill     = (data.get("bill") or "").strip()
+    persona  = (data.get("persona") or "").strip()
+    medio    = (data.get("medio") or "").strip()
     submedio = (data.get("submedio") or "").strip()
-    fecha = (data.get("fecha") or "").strip()
-    nota = (data.get("nota") or "").strip()
+    fecha    = (data.get("fecha") or "").strip()
+    nota     = (data.get("nota") or "").strip()
+    monto    = data.get("monto")
+
+    # IDs opacos (opcionales)
+    bill_id      = data.get("bill_id")
+    persona_id   = data.get("persona_id")
+    medio_id     = data.get("medio_id")
+    submedio_id  = data.get("submedio_id")
+
     if not bill or monto is None or not persona or not fecha:
         return json_error("Campos requeridos: bill, monto, persona, fecha", 400)
+
+    # ¿tiene estas columnas la tabla pagos?
+    has_bill_id     = table_has("pagos", "bill_id")
+    has_persona_id  = table_has("pagos", "persona_id")
+    has_medio_id    = table_has("pagos", "medio_id")
+    has_submedio_id = table_has("pagos", "submedio_id")
+
     try:
+        cols = ["user_id", "fecha", "monto", "bill", "persona", "medio", "submedio", "nota", "created_at"]
+        vals = [":uid", ":fe", ":mo", ":bi", ":pe", ":me", ":sm", ":no", "NOW()"]
+
+        if has_bill_id:
+            cols.append("bill_id");     vals.append(":bill_id")
+        if has_persona_id:
+            cols.append("persona_id");  vals.append(":persona_id")
+        if has_medio_id:
+            cols.append("medio_id");    vals.append(":medio_id")
+        if has_submedio_id:
+            cols.append("submedio_id"); vals.append(":submedio_id")
+
+        # RETURNING bien separado por comas
+        returning = ["id", "fecha", "monto", "bill", "persona", "medio", "submedio", "nota"]
+        if has_bill_id:     returning.append("bill_id")
+        if has_persona_id:  returning.append("persona_id")
+        if has_medio_id:    returning.append("medio_id")
+        if has_submedio_id: returning.append("submedio_id")
+
+        sql = f"""
+            INSERT INTO public.pagos ({", ".join(cols)})
+            VALUES ({", ".join(vals)})
+            RETURNING {", ".join(returning)}
+        """
+
+        params = {
+            "uid": uid, "fe": fecha, "mo": monto,
+            "bi": bill, "pe": persona, "me": medio, "sm": submedio, "no": nota,
+            "bill_id": bill_id, "persona_id": persona_id, "medio_id": medio_id, "submedio_id": submedio_id,
+        }
+
         with engine.begin() as conn:
-            row = conn.execute(text("""
-                INSERT INTO pagos (user_id, bill, monto, persona, medio, submedio, fecha, nota, created_at)
-                VALUES (:uid,:bi,:mo,:pe,:me,:sm,:fe,:no, NOW())
-                RETURNING id, bill, monto, persona, medio, submedio, fecha, nota
-            """), {"uid": uid, "bi": bill, "mo": monto, "pe": persona, "me": medio, "sm": submedio, "fe": fecha, "no": nota}).mappings().first()
-        return jsonify({"ok": True, "pago": {
-            "id": row["id"], "bill": row["bill"], "monto": float(row["monto"] or 0),
-            "persona": row["persona"], "medio": row["medio"], "submedio": row["submedio"],
-            "fecha": row["fecha"].isoformat() if row["fecha"] else None, "nota": row["nota"],
-        }})
+            row = conn.execute(text(sql), params).mappings().first()
+
+        out = {
+            "id": row["id"],
+            "fecha": row["fecha"].isoformat() if row["fecha"] else None,
+            "monto": float(row["monto"] or 0),
+            "bill": row["bill"],
+            "persona": row["persona"],
+            "medio": row["medio"],
+            "submedio": row["submedio"],
+            "nota": row["nota"],
+        }
+        if has_bill_id:     out["bill_id"] = row.get("bill_id")
+        if has_persona_id:  out["persona_id"] = row.get("persona_id")
+        if has_medio_id:    out["medio_id"] = row.get("medio_id")
+        if has_submedio_id: out["submedio_id"] = row.get("submedio_id")
+
+        return jsonify({"ok": True, "pago": out})
+
     except SQLAlchemyError as e:
         return json_error(str(e), 500)
 

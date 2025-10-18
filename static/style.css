@@ -267,7 +267,6 @@ form button,
   align-items: center;
   gap: 8px;
   height: 40px;
-  line-height: 1; /* espacio entre bienvenida y botón */
 }
 
 .bienvenida {
