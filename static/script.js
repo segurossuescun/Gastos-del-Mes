@@ -5100,11 +5100,16 @@ function actualizarResumenEgresos(egresosFiltrados) {
   }
 
 // Editar / eliminar (global)
+// Editar / eliminar (global)
 W.editarEgreso = (i) => {
   const eg = egresos[i];
   if (!eg) return;
 
-  document.getElementById("fecha-egreso").value = eg.fecha;
+  // Asegura que la vista esté visible antes de scrollear
+  try { if (typeof mostrarVista === 'function') mostrarVista('egresos'); } catch {}
+
+  // --- Relleno como ya lo tenías ---
+  document.getElementById("fecha-egreso").value = String(eg.fecha || '').slice(0,10);
   document.getElementById("monto-egreso").value = eg.monto;
 
   // categoría + sub
@@ -5121,6 +5126,20 @@ W.editarEgreso = (i) => {
 
   form.dataset.editIndex = i;
   form.querySelector("button[type='submit']").textContent = "Actualizar Egreso";
+
+  // --- Scroll al formulario + foco en FECHA ---
+  requestAnimationFrame(() => {
+    try { form.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+    setTimeout(() => {
+      const dateEl =
+        document.getElementById("fecha-egreso") ||
+        form.querySelector('input[type="date"]');
+      if (dateEl) {
+        try { dateEl.focus({ preventScroll: true }); } catch {}
+        try { dateEl.select && dateEl.select(); } catch {}
+      }
+    }, 250); // sube a 350–500ms si tu vista tiene animaciones
+  });
 };
 
 W.eliminarEgreso = (i) => {
