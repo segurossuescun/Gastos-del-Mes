@@ -1285,7 +1285,6 @@ function normalizarEmailLogin(valor) {
 }
 
 // Lógica de login con mensajes de trial/paid (corregida)
-// ⛳ pega esta versión (clave: early-return cuando needs_subscription)
 async function doLogin(email, password) {
   try {
     const res = await fetch('/login', {
@@ -1615,49 +1614,134 @@ function showResetPasswordDialog(token) {
   const form = document.getElementById('form-registro');
   if (!form) { document.addEventListener('DOMContentLoaded', wireRegistroFormUnico, { once:true }); return; }
 
-  // Evita agregar más de un listener
+  // Evita listeners duplicados
   form.replaceWith(form.cloneNode(true));
   const f = document.getElementById('form-registro');
 
+  // --- Anti-@ + aviso global ---
+  const usuarioInput = document.getElementById('registro-user');
+  const dominioSel   = document.getElementById('registro-dominio');
+
+  function sanitizeUsuario(v){
+    // quita @ y todo lo que siga, quita espacios, a minúscula
+    return String(v).replace(/@.*$/,'').replace(/\s+/g,'').toLowerCase();
+  }
+  let _tipTime = 0;
+    function showUsuarioTip(){
+      // evita spam (7.5s entre toasts)
+      if (Date.now() - _tipTime < 7500) return;
+      _tipTime = Date.now();
+
+      const fondo   = '#1b1433'; // morado muy oscuro
+      const texto   = '#efe7ff'; // lavanda súper clara
+      const acento1 = '#7c3aed'; // morado
+      const acento2 = '#a78bfa'; // lavanda/morado claro
+
+      if (window.Swal) {
+        Swal.fire({
+          toast: true,
+          position: 'top',
+          icon: 'info',
+          title: 'No escribas tu dominio (nada de @gmail, @hotmail, etc.)',
+          showConfirmButton: false,
+          timer: 7500,
+          timerProgressBar: true,
+          background: fondo,
+          color: texto,
+          didOpen: (el) => {
+            // baja un poquito el toast y ajusta colores internos
+            el.style.marginTop = '28px';
+            const title = el.querySelector('.swal2-title');
+            if (title) title.style.color = texto;
+
+            const icon = el.querySelector('.swal2-icon');
+            if (icon) {
+              icon.style.borderColor = acento1;
+              icon.style.color       = acento2;  // icono “i”
+              // algunos temas usan fill:
+              icon.style.fill        = acento2;
+            }
+
+            // barra de progreso
+            const bar = el.querySelector('.swal2-timer-progress-bar');
+            if (bar) bar.style.background = acento2;
+          }
+        });
+      } else {
+        // Fallback sin Swal (mismo esquema de color)
+        const t = document.createElement('div');
+        t.textContent = 'No escribas tu dominio (nada de @gmail, @hotmail, etc.)';
+        Object.assign(t.style, {
+          position: 'fixed',
+          top: '28px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: fondo,
+          color: texto,
+          padding: '10px 14px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 24px rgba(0,0,0,.35)',
+          zIndex: 10000,
+          fontSize: '14px',
+          border: `1px solid ${acento1}`
+        });
+        document.body.appendChild(t);
+        setTimeout(()=> t.remove(), 7500);
+      }
+    }
+
+  // Aviso al enfocar
+  usuarioInput?.addEventListener('focus', showUsuarioTip);
+  // Limpia mientras escribe + muestra aviso si se modificó
+  usuarioInput?.addEventListener('input', () => {
+    const before = usuarioInput.value;
+    const after  = sanitizeUsuario(before);
+    if (after !== before) {
+      usuarioInput.value = after;
+      showUsuarioTip();
+    }
+  });
+  // Si cambian el dominio, re-sanea usuario
+  dominioSel?.addEventListener('change', () => {
+    if (usuarioInput) usuarioInput.value = sanitizeUsuario(usuarioInput.value);
+  });
+
+  // --- Submit registro ---
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // anti-doble submit (por si el usuario hace doble click)
+    // anti-doble submit
     if (f.dataset.busy === '1') return;
     f.dataset.busy = '1';
     const release = () => { delete f.dataset.busy; };
 
     // Toma de campos
     const nombre   = document.getElementById('registro-nombre')?.value?.trim() || "";
-    const usuario  = document.getElementById('registro-user')?.value?.trim().toLowerCase() || "";
+    const usuario  = sanitizeUsuario(document.getElementById('registro-user')?.value || "");
     const dominio  = document.getElementById('registro-dominio')?.value || "@gmail.com";
     const pass1    = document.getElementById('registro-password')?.value || "";
     const pass2    = document.getElementById('registro-password2')?.value || "";
 
-    // Email final
+    // Email final (si ya vino con @ no debería pasar, pero por si acaso)
     const email = usuario.includes("@") ? usuario : `${usuario}${dominio}`;
 
-    // Validaciones de cliente
+    // Validaciones
     if (!usuario || !pass1) {
       release();
-      Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
-      return;
+      return Swal.fire({ icon:'info', title:'Falta información', text:'Completa usuario y contraseña.' });
     }
     if (pass1 !== pass2) {
       release();
-      Swal.fire({ icon:'info', title:'Las contraseñas no coinciden' });
-      return;
+      return Swal.fire({ icon:'info', title:'Las contraseñas no coinciden' });
     }
-    // Mismo criterio que el backend: 8+, 1 mayúscula, 1 minúscula, 1 número (símbolos OPCIONALES)
     const re = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/;
     if (!re.test(pass1)) {
       release();
-      Swal.fire({
+      return Swal.fire({
         icon:'info',
         title:'Contraseña no válida',
         text:'Mínimo 8 caracteres e incluye 1 mayúscula, 1 minúscula y 1 número.'
       });
-      return;
     }
 
     // Llamada al backend
@@ -1672,7 +1756,6 @@ function showResetPasswordDialog(token) {
       let data = {};
       try { data = JSON.parse(text); } catch {}
 
-      // ✅ Éxito SOLO si es 2xx y ok:true
       if (res.ok && data?.ok === true) {
         await Swal.fire({
           icon:'success',
@@ -1681,7 +1764,6 @@ function showResetPasswordDialog(token) {
           confirmButtonText:'Entrar'
         });
 
-        // El backend ya creó la sesión → marca y entra
         if (typeof _marcarSesion === 'function') _marcarSesion(true); else window.__sessionOK = true;
         try {
           sessionStorage.setItem('usuario', JSON.stringify({
@@ -1689,10 +1771,8 @@ function showResetPasswordDialog(token) {
           }));
         } catch {}
 
-        // Muestra la app y carga datos
         await (window.mostrarAppYcargar?.() || Promise.resolve());
 
-        // Oculta vistas de registro/login
         document.getElementById('seccion-login')?.classList.add('oculto');
         document.getElementById('seccion-registro')?.classList.add('oculto');
         document.getElementById('usuario')?.setAttribute('style','display:none;');
@@ -1701,10 +1781,9 @@ function showResetPasswordDialog(token) {
 
         f.reset();
         release();
-        return; // 👈 importantísimo: no caer al bloque de error
+        return;
       }
 
-      // ❌ Cualquier otra cosa es error
       const msg = data?.error || `Error ${res.status}`;
       release();
       Swal.fire({ icon:'error', title:'No pudimos registrar', text: msg });
@@ -3568,10 +3647,34 @@ function reiniciarTemporizadorInactividad() {
 
   reiniciarTemporizadorInactividad();
 
-  // 👉 Quitar @ al escribir usuario
-  usuarioInput.addEventListener("input", () => {
-    usuarioInput.value = usuarioInput.value.replace(/@/g, "");
+  // 👉 Quitar dominio: si escriben/pegan "nombre@loquesea.com" queda "nombre"
+(function fixUsuarioSinDominio(){
+  if (!usuarioInput) return;
+
+  const limpiar = (v) => {
+    // quita invisibles, trim, lower y corta TODO desde el primer @
+    v = String(v || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim().toLowerCase();
+    return v.replace(/@.*/g, ''); // elimina "@loquesea.com"
+  };
+
+  // Bloquea escribir '@' directamente
+  usuarioInput.addEventListener('keydown', (e) => {
+    if (e.key === '@') e.preventDefault();
   });
+
+  // Limpia pegados/ediciones
+  usuarioInput.addEventListener('input', () => {
+    const before = usuarioInput.value;
+    const after  = limpiar(before);
+    if (before !== after) {
+      const s = usuarioInput.selectionStart;
+      usuarioInput.value = after;
+      // recoloca el cursor lo mejor posible
+      const pos = Math.min(s, after.length);
+      usuarioInput.setSelectionRange(pos, pos);
+    }
+  });
+})();
 
   // 👁️ Mostrar/ocultar contraseñas
   document.querySelectorAll(".boton-ojo").forEach(boton => {
