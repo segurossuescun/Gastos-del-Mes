@@ -4706,6 +4706,104 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+// ==========================================
+// WhatsApp para cada persona del bill
+// compat con onclick="enviarMensaje(nombre, monto, fecha, tipo)"
+// ==========================================
+window.enviarMensaje = function(nombrePersona, montoParte, fechaBill, tipoBill) {
+  console.log("📩 enviarMensaje() CLICK!!!", {
+    nombrePersona,
+    montoParte,
+    fechaBill,
+    tipoBill
+  });
+
+  // 1. Intentar teléfono específico de esa persona (si está en config)
+  let telefonoCandidato = "";
+  if (typeof buscarPersonaPorNombre === "function") {
+    try {
+      const personaInfo = buscarPersonaPorNombre(nombrePersona);
+      console.log("📩 personaInfo:", personaInfo);
+      if (personaInfo && personaInfo.telefono) {
+        telefonoCandidato = personaInfo.telefono;
+      }
+    } catch (err) {
+      console.warn("buscarPersonaPorNombre falló:", err);
+    }
+  }
+
+  // 2. Fallback: teléfono del dueño / perfil
+  if (!telefonoCandidato && window.W?.configTemporal?.telefono_dueno) {
+    telefonoCandidato = window.W.configTemporal.telefono_dueno;
+    console.log("📩 usando telefono_dueno de configTemporal:", telefonoCandidato);
+  }
+  if (!telefonoCandidato) {
+    try {
+      const perfilCache = JSON.parse(sessionStorage.getItem("perfil") || "{}");
+      if (perfilCache.telefono) {
+        telefonoCandidato = perfilCache.telefono;
+        console.log("📩 usando teléfono de sessionStorage.perfil:", telefonoCandidato);
+      }
+    } catch (err) {
+      console.warn("No pude leer sessionStorage.perfil:", err);
+    }
+  }
+  if (!telefonoCandidato) {
+    const telUI = document.getElementById("telefono-dueno-pop")?.textContent?.trim();
+    if (telUI && telUI !== "—") {
+      telefonoCandidato = telUI;
+      console.log("📩 usando teléfono visible en UI:", telefonoCandidato);
+    }
+  }
+
+  // 3. Normalizar número
+  if (telefonoCandidato) {
+    if (typeof normalizarTelefono === "function") {
+      telefonoCandidato = normalizarTelefono(telefonoCandidato);
+    } else {
+      telefonoCandidato = String(telefonoCandidato).replace(/\D+/g, "");
+    }
+  }
+  console.log("📩 teléfono final normalizado:", telefonoCandidato);
+
+  // 4. Preparar el mensaje de WhatsApp
+  const montoStr   = Number(montoParte || 0).toFixed(2);
+  const fechaNice  = (typeof formatoLegible === "function")
+    ? formatoLegible(fechaBill)
+    : fechaBill;
+
+  const texto =
+    `¡Hola ${nombrePersona}! 👋 ¿cómo estás?\n\n` +
+    `Te escribo por el bill *${tipoBill}* del ${fechaNice}.\n` +
+    `Tu parte es $${montoStr} 💸\n\n` +
+    `¡Me confirmas cuando pagues! 🙏💜` +
+    `¡Feliz día! 😁`;
+
+  // 5. Construir URL de WhatsApp
+  let waURL = "";
+  if (telefonoCandidato) {
+    waURL = `https://wa.me/${telefonoCandidato}?text=${encodeURIComponent(texto)}`;
+  } else {
+    console.warn("⚠️ No tengo teléfono válido. Abro sin número para debug.");
+    // abrimos chat sin número (solo mensaje) para al menos demostrar que sí funcionó el click
+    waURL = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+  }
+
+  console.log("📩 Abriendo WhatsApp URL:", waURL);
+
+  // 6. Abrir en nueva pestaña/ventana
+  try {
+    if (window.W && typeof W.open === "function") {
+      W.open(waURL, "_blank");
+    } else {
+      window.open(waURL, "_blank");
+    }
+  } catch (err) {
+    console.error("❌ window.open falló:", err);
+    alert("Tu navegador bloqueó la ventana emergente. Activa pop-ups 🙏");
+  }
+};
+
   // =============================
   // Mostrar bills (filtrar y pintar) — por ID
   // =============================
@@ -4764,14 +4862,25 @@ document.addEventListener("DOMContentLoaded", () => {
       let personasHTML = "";
       entradas.forEach(([nombre, monto]) => {
         const mostrarNombre = (nombre === 'DUEÑO') ? owner : nombre;
+
+        // sanitizar para que no rompa el onclick si hay comillas '
+        const safeNombre = String(mostrarNombre).replace(/'/g, "\\'");
+        const safeFecha  = String(bill.fecha || "").replace(/'/g, "\\'");
+        const safeTipo   = String(bill.tipo  || "").replace(/'/g, "\\'");
+
         personasHTML += `
           <div class="persona-row">
             <strong class="nombre">${mostrarNombre}:</strong>
             <span class="importe">$${Number(monto).toFixed(2)}</span>
-            <button type="button" class="wa-btn" title="WhatsApp"
-              onclick="enviarMensaje('${mostrarNombre}', ${monto}, '${bill.fecha}', '${bill.tipo}')">📩</button>
+            <button
+              type="button"
+              class="wa-btn"
+              title="WhatsApp"
+              onclick="enviarMensaje('${safeNombre}', ${Number(monto || 0)}, '${safeFecha}', '${safeTipo}')"
+            >📩</button>
           </div>`;
       });
+
 
       div.innerHTML = `
         <div class="card-header">

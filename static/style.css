@@ -2512,3 +2512,36 @@ html, body { margin:0; padding:0; overflow-x:hidden; }
   .mini-disp-panel { font-size: 19px; }
   .mini-disp-total { font-size: 1.4rem; }
 }
+/* Mensaje inline junto al usuario (registro) */
+.tip-usuario-dominio {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  color: #b54708;          /* ámbar/advertencia */
+  background: #fff7ed;     /* fondo suave */
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: inline-block;
+}
+#form-registro .registro-tip {
+  position: absolute;
+  top: 50% !important;
+  left: -8px !important;
+  right: auto !important;
+  transform: translate(-100%, -50%) !important;
+  background: #111;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 6px 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  white-space: nowrap;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+#form-registro .registro-tip.show { opacity: .95; }
+
