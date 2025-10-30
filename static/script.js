@@ -507,6 +507,31 @@ function disponibleMes(mesYYMM, done) {
     compute();
   }
 }
+// 👀 Muestra la sección (si existe), hace scroll al form y enfoca el 1er campo
+function mostrarYEnfocarForm(candidatosSeccionIds, formId, primerCampoSelector) {
+  // 1) Intenta mostrar la vista/section si tienes router de vistas
+  try {
+    if (typeof mostrarVista === 'function' && Array.isArray(candidatosSeccionIds)) {
+      for (const id of candidatosSeccionIds) {
+        if (document.getElementById(id)) { mostrarVista(id); break; }
+      }
+    }
+  } catch {}
+
+  // 2) Toma el form y hace scroll suave
+  const form = document.getElementById(formId);
+  if (!form) return;
+
+  form.classList.add('scroll-target');
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // 3) Enfocar el primer campo
+  setTimeout(() => {
+    const preferido = primerCampoSelector ? document.querySelector(primerCampoSelector) : null;
+    const first = preferido || form.querySelector('input, select, textarea, button:not([type="button"])');
+    try { first?.focus({ preventScroll: true }); } catch { first?.focus?.(); }
+  }, 220); // pequeño delay para que el scroll termine
+}
 
 // 👇 justo aquí insertas el bloque del overlay
 (function setupMiniDisponible(){
@@ -697,6 +722,74 @@ function limpiarBillsConPersonasInvalidas(bills, personas) {
       .map(n => String(n).trim())
       .filter(n => set.has(n.toLowerCase()))
   }));
+}
+// === Mostrar Pagos y enfocar el primer campo (igual que Bills/Ingresos) ===
+function mostrarYEnfocarPagos() {
+  try { if (typeof mostrarVista === 'function') mostrarVista('pagos'); } catch {}
+  const form = document.getElementById('form-pagos');
+  if (!form) return;
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  focusLaterById('bill-pago', 180);
+}
+
+// Añade un botón "Cancelar" solo mientras el form está en modo edición.
+function focusAfterPaint(el, delay=150){
+  if (!el) return;
+  setTimeout(() => { try { el.focus({ preventScroll:true }); } catch { el.focus?.(); } }, delay);
+}
+
+// ——— Helpers de foco y Cancelar ———
+function focusLaterById(id, delay = 180) {
+  setTimeout(() => {
+    const el = document.getElementById(id) || document.querySelector(id);
+    try { el?.focus({ preventScroll: true }); } catch { el?.focus?.(); }
+  }, delay);
+}
+
+/**
+ * Inserta un botón "Cancelar" al lado del submit y gestiona el modo edición,
+ * copiando las clases del botón submit para que herede tus colores/estilos.
+ */
+function ensureCancelBtn(form, {
+  id = 'btn-cancel-mini',
+  label = 'Cancelar',
+  submitNormalText = 'Guardar',
+  submitEditText,
+  onCancel = () => {}
+} = {}) {
+  if (!form) return;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (!submitBtn) return;
+
+  if (submitEditText) submitBtn.textContent = submitEditText;
+  if (form.querySelector(`#${id}`)) return; // no duplicar
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.id = id;
+  cancel.textContent = label;
+
+  // 👇 Copia el estilo del submit para que se vea igual (morado, etc.)
+  cancel.className = (submitBtn.className || '').trim();
+  cancel.classList.add('btn-cancel-mini');
+
+  submitBtn.insertAdjacentElement('afterend', cancel);
+
+  const clearEdit = () => {
+    delete form.dataset.editId;
+    delete form.dataset.editIndex;
+    try { form.reset(); } catch {}
+    submitBtn.textContent = submitNormalText;
+    cancel.remove();
+    try { onCancel(); } catch {}
+  };
+
+  cancel.addEventListener('click', clearEdit, { once: true });
+  form.addEventListener('submit', () => {
+    // si el usuario guarda, también quitamos el cancelar
+    try { cancel.remove(); } catch {}
+    submitBtn.textContent = submitNormalText;
+  }, { once: true });
 }
 
 // ---- Helpers de toast (reusar en ingresos/bills/egresos/pagos) ----
@@ -4310,47 +4403,67 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // =============== Editar / Eliminar por ID ===============
-  W.editarIngresoId = (id)=>{
-    const i = getIngresoById(id);
-    if (!i) return;
+    // =============== Editar / Eliminar por ID ===============
+W.editarIngresoId = (id) => {
+  const i = getIngresoById(id);
+  if (!i) return;
 
-    // Asegura opciones actuales
-    llenarSelectFuentesIngresosForm();
+  llenarSelectFuentesIngresosForm?.();
 
-    // Set fuente en form: por fuente_id → slug → texto exacto
-    if (selectFuente){
-      let chosen=false;
-      if (i.fuente_id){
-        for (const opt of selectFuente.options){
-          const oid = (opt.getAttribute?.('data-id') || opt.dataset?.id || "").trim();
-          if (oid && oid === String(i.fuente_id).trim()){ opt.selected=true; chosen=true; break; }
-        }
-      }
-      if (!chosen){
-        const want = slug(i.fuente);
-        for (const opt of selectFuente.options){
-          if (slug(opt.value) === want){ opt.selected=true; chosen=true; break; }
-        }
-      }
-      if (!chosen){
-        for (const opt of selectFuente.options){
-          if ((opt.value||"").trim() === String(i.fuente||"").trim()){ opt.selected=true; break; }
-        }
+  const form     = document.getElementById('form-ingresos') || document.querySelector('#ingresos form');
+  const fuenteEl = document.getElementById('ingreso-fuente');
+  const fechaEl  = document.getElementById('fecha-ingreso');
+  const montoEl  = document.getElementById('monto-ingreso');
+  const notaEl   = document.getElementById('nota-ingreso');
+  if (!form || !fechaEl || !montoEl) return;
+
+  // Set fuente por id → slug → texto exacto
+  if (fuenteEl) {
+    let chosen = false;
+    if (i.fuente_id) {
+      for (const opt of fuenteEl.options) {
+        const oid = (opt.getAttribute?.('data-id') || opt.dataset?.id || '').trim();
+        if (oid && oid === String(i.fuente_id).trim()) { opt.selected = true; chosen = true; break; }
       }
     }
+    if (!chosen) {
+      const want = slug(i.fuente);
+      for (const opt of fuenteEl.options) {
+        if (slug(opt.value) === want) { opt.selected = true; chosen = true; break; }
+      }
+    }
+    if (!chosen) {
+      for (const opt of fuenteEl.options) {
+        if ((opt.value || '').trim() === String(i.fuente || '').trim()) { opt.selected = true; break; }
+      }
+    }
+  }
 
-    fechaEl.value = i.fecha || "";
-    montoEl.value = Number(i.monto||0).toFixed(2);
-    notaEl.value  = i.nota || "";
+  // Campos
+  fechaEl.value = i.fecha || '';
+  montoEl.value = Number(i.monto || 0).toFixed(2);
+  if (notaEl) notaEl.value = i.nota || '';
 
-    form.dataset.editId = String(id);
-    const btn = form.querySelector("button[type='submit']");
-    if (btn) btn.textContent = "Actualizar Ingreso";
+  // Modo edición + botón cancelar
+  form.dataset.editId = String(id);
+  if (typeof ensureCancelBtn === 'function') {
+    ensureCancelBtn(form, {
+      id: 'cancel-ingreso',
+      submitNormalText: 'Guardar Ingreso',
+      submitEditText  : 'Actualizar Ingreso',
+      onCancel        : () => { try { form.reset(); } catch {}; delete form.dataset.editId; }
+    });
+    const btnCancel = form.querySelector('#cancel-ingreso');
+    if (btnCancel) btnCancel.classList.add('btn', 'btn-secundario', 'btn-cancel-mini');
+  } else {
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.textContent = 'Actualizar Ingreso';
+  }
 
-    form.scrollIntoView({ behavior:"smooth", block:"start" });
-    setTimeout(()=> fechaEl?.focus({ preventScroll:true }), 250);
-  };
+  // Scroll + foco: FECHA primero (como pediste)
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  focusAfterPaint(fechaEl || fuenteEl);
+};
 
   W.eliminarIngresoId = async (id)=>{
     const i = getIngresoById(id);
@@ -4953,44 +5066,75 @@ window.enviarMensaje = function(nombrePersona, montoParte, fechaBill, tipoBill) 
   }
 
   // =============================
-  // Editar / Eliminar — por ID
+  // Editar / Eliminar — por ID (Bills)
   // =============================
   W.editarBillId = (id) => {
     const bill = getBillById(id);
     if (!bill) return;
 
-    // set tipo en el select del form por id opaco → slug → texto exacto
-    if (tipoSelect) {
+    // Refs fresquitas (por si se re-renderizó algo)
+    const form       = document.getElementById("form-bills") || document.querySelector("#bills form");
+    const tipoEl     = document.getElementById("bill-tipo")   || tipoSelect;
+    const fechaEl    = document.getElementById("bill-fecha")  || fechaInput;
+    const montoEl    = document.getElementById("bill-monto")  || montoInput;
+    if (!form || !tipoEl || !fechaEl || !montoEl) return;
+
+    // Set tipo en el select por prioridad: tipo_id → slug → texto exacto
+    if (tipoEl) {
       let chosen = false;
+
       if (bill.tipo_id) {
-        for (const opt of tipoSelect.options) {
+        for (const opt of tipoEl.options) {
           const oid = (opt.getAttribute?.("data-id") || opt.dataset?.id || "").trim();
           if (oid && oid === String(bill.tipo_id).trim()) { opt.selected = true; chosen = true; break; }
         }
       }
       if (!chosen) {
         const wantKey = slugTipo(bill.tipo);
-        for (const opt of tipoSelect.options) {
+        for (const opt of tipoEl.options) {
           if (slugTipo(opt.value) === wantKey) { opt.selected = true; chosen = true; break; }
         }
       }
       if (!chosen) {
-        for (const opt of tipoSelect.options) {
+        for (const opt of tipoEl.options) {
           if ((opt.value || "").trim() === String(bill.tipo || "").trim()) { opt.selected = true; break; }
         }
       }
     }
 
-    fechaInput.value = bill.fecha || "";
+    // Rellenar campos básicos
+    fechaEl.value = bill.fecha || "";
     const n = Number(bill.monto || 0);
-    montoInput.value = Number.isFinite(n) ? n.toFixed(2) : (bill.monto ?? "");
+    montoEl.value = Number.isFinite(n) ? n.toFixed(2) : (bill.monto ?? "");
 
-    form.dataset.editId = String(id); // ← modo edición por id
-    const btn = document.getElementById("btn-guardar-bill") || form.querySelector('button[type="submit"]');
-    if (btn) btn.textContent = "Actualizar Bill";
+    // Modo edición + botón Cancelar (unificado)
+    form.dataset.editId = String(id);
+    if (typeof ensureCancelBtn === 'function') {
+      ensureCancelBtn(form, {
+        id: 'cancel-bill',
+        submitNormalText: '💾 Guardar Bill',
+        submitEditText  : 'Actualizar Bill',
+        onCancel        : () => {
+          try { form.reset(); } catch {}
+          delete form.dataset.editId;
+        }
+      });
+      // que herede estilos de tus botones moraditos
+      const btnCancel = form.querySelector('#cancel-bill');
+      if (btnCancel) btnCancel.classList.add('btn', 'btn-secundario', 'btn-cancel-mini');
+    } else {
+      // Fallback sin helper
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.textContent = 'Actualizar Bill';
+    }
 
+    // Scroll + foco: **Tipo de Bill** (como pediste)
     form.scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => fechaInput?.focus({ preventScroll: true }), 250);
+    if (typeof focusAfterPaint === 'function') {
+      focusAfterPaint(tipoEl, 150);
+    } else {
+      setTimeout(() => { try { tipoEl.focus({ preventScroll: true }); } catch { tipoEl.focus?.(); } }, 150);
+    }
   };
 
   W.eliminarBillId = async (id) => {
@@ -5311,47 +5455,87 @@ function actualizarResumenEgresos(egresosFiltrados) {
     });
   }
 
-// Editar / eliminar (global)
-// Editar / eliminar (global)
+// =============================
+// Editar / Eliminar — Egresos
+// =============================
 W.editarEgreso = (i) => {
   const eg = egresos[i];
   if (!eg) return;
 
-  // Asegura que la vista esté visible antes de scrollear
+  // Asegura vista visible antes de scrollear
   try { if (typeof mostrarVista === 'function') mostrarVista('egresos'); } catch {}
 
-  // --- Relleno como ya lo tenías ---
-  document.getElementById("fecha-egreso").value = String(eg.fecha || '').slice(0,10);
-  document.getElementById("monto-egreso").value = eg.monto;
+  // Refs frescas por si el DOM cambió
+  const form               = document.getElementById('form-egresos') || document.querySelector('#egresos form');
+  const fechaEl            = document.getElementById('fecha-egreso');
+  const montoEl            = document.getElementById('monto-egreso');
+  const categoriaSelect    = document.getElementById('categoria-egreso')    || window.categoriaSelect;
+  const subcategoriaSelect = document.getElementById('subcategoria-egreso') || window.subcategoriaSelect;
+  const medioSelect        = document.getElementById('medio-egreso')        || window.medioSelect;
+  const submedioSelect     = document.getElementById('submedio-egreso')     || window.submedioSelect;
+  const notaInput          = document.getElementById('nota-egreso')         || window.notaInput;
 
-  // categoría + sub
-  categoriaSelect.value = eg.categoria || "";
-  categoriaSelect.dispatchEvent(new Event("change"));
-  subcategoriaSelect.value = eg.subcategoria || "";
+  if (!form || !fechaEl || !montoEl) return;
 
-  // medio + submedio
-  medioSelect.value = eg.medio || "";
-  medioSelect.dispatchEvent(new Event("change"));
-  submedioSelect.value = eg.submedio || "";
+  // ---- Rellenar campos (como ya lo tenías) ----
+  fechaEl.value = String(eg.fecha || '').slice(0, 10);
+  montoEl.value = Number(eg.monto || 0).toFixed(2);
 
-  notaInput.value = eg.nota || "";
+  // Categoría + sub
+  if (categoriaSelect) {
+    categoriaSelect.value = eg.categoria || '';
+    categoriaSelect.dispatchEvent(new Event('change')); // rellena subcategorías
+  }
+  if (subcategoriaSelect) subcategoriaSelect.value = eg.subcategoria || '';
 
+  // Medio + submedio
+  if (medioSelect) {
+    medioSelect.value = eg.medio || '';
+    medioSelect.dispatchEvent(new Event('change')); // rellena submedios
+  }
+  if (submedioSelect) submedioSelect.value = eg.submedio || '';
+
+  if (notaInput) notaInput.value = eg.nota || '';
+
+  // ---- Modo edición + botón Cancelar unificado ----
   form.dataset.editIndex = i;
-  form.querySelector("button[type='submit']").textContent = "Actualizar Egreso";
 
-  // --- Scroll al formulario + foco en FECHA ---
-  requestAnimationFrame(() => {
-    try { form.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
-    setTimeout(() => {
-      const dateEl =
-        document.getElementById("fecha-egreso") ||
-        form.querySelector('input[type="date"]');
-      if (dateEl) {
-        try { dateEl.focus({ preventScroll: true }); } catch {}
-        try { dateEl.select && dateEl.select(); } catch {}
+  if (typeof ensureCancelBtn === 'function') {
+    ensureCancelBtn(form, {
+      id: 'cancel-egreso',
+      submitNormalText: 'Guardar Egreso',
+      submitEditText  : 'Actualizar Egreso',
+      onCancel        : () => {
+        try { form.reset(); } catch {}
+        delete form.dataset.editIndex;
+        // Si quieres limpiar subcontroles:
+        try {
+          const subCont = document.getElementById('submedio-egreso-container');
+          if (subCont) subCont.style.display = 'none';
+        } catch {}
       }
-    }, 250); // sube a 350–500ms si tu vista tiene animaciones
-  });
+    });
+    const btnCancel = form.querySelector('#cancel-egreso');
+    if (btnCancel) btnCancel.classList.add('btn', 'btn-secundario', 'btn-cancel-mini'); // moradito oscuro
+  } else {
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.textContent = 'Actualizar Egreso';
+  }
+
+  // ---- Scroll + foco: FECHA (como pediste)
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const focusFecha = () => {
+    try { fechaEl.focus({ preventScroll: true }); } catch { fechaEl.focus?.(); }
+    try { fechaEl.select && fechaEl.select(); } catch {}
+  };
+
+  if (typeof focusAfterPaint === 'function') {
+    focusAfterPaint(fechaEl, 150);
+  } else {
+    // doble rAF para asegurar que el repaint terminó
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(focusFecha, 50)));
+  }
 };
 
 W.eliminarEgreso = (i) => {
@@ -5542,11 +5726,6 @@ function wireCambioMedioPago() {
   }
 }
 
-// Carga inicial de pagos
-function clavePago(p) {
-  return `${p.bill}|${p.persona}|${p.fecha}|${p.medio||''}|${p.submedio||''}|${p.monto}|${p.nota||''}`;
-}
-
 // ✅ ÚNICA versión de cargarPagos (drop-in)
 // Carga inicial de pagos
 function clavePago(p) {
@@ -5583,7 +5762,6 @@ async function cargarPagos() {
   }
 }
 
-// Alta / edición de pagos
 // Alta / edición de pagos
 (function wireFormPagos(){
   const { form } = $pagosEls();
@@ -5861,25 +6039,32 @@ function actualizarGraficoPagos(filtrados) {
   });
 }
 
+// === Reemplaza tu editarPago(i) para llamar al helper anterior ===
 function editarPago(i) {
   const p = pagos[i];
   if (!p) return;
 
-  const { bill, monto, persona, medio, fecha, nota, subCont, subSelect } = $pagosEls();
-  if (!bill || !monto || !persona || !medio || !fecha || !nota) return;
+  // Asegura que estamos en la vista Pagos
+  try { if (typeof mostrarVista === 'function') mostrarVista('pagos'); } catch {}
 
-  bill.value      = p.bill || "";
-  monto.value     = Number(p.monto || 0);
-  persona.value   = p.persona || "";
-  fecha.value     = p.fecha || "";
-  nota.value      = p.nota || "";
+  // Refs frescas
+  const { form, bill, monto, persona, medio, fecha, nota, subCont, subSelect } = $pagosEls();
+  if (!form || !bill || !monto || !persona || !medio || !fecha || !nota) return;
 
+  // Relleno de campos
+  bill.value    = p.bill     || "";
+  monto.value   = Number(p.monto || 0);
+  persona.value = p.persona  || "";
+  fecha.value   = p.fecha    || "";
+  nota.value    = p.nota     || "";
+
+  // Monto => habilitar/ocultar medio/submedio
   const montoNum = Number(p.monto || 0);
   if (montoNum <= 0) {
     medio.value    = "";
     medio.disabled = true;
     medio.title    = "Monto = 0 → No pagó";
-    if (subCont) subCont.style.display = "none";
+    if (subCont)   subCont.style.display = "none";
     if (subSelect) subSelect.value = "";
   } else {
     medio.disabled = false;
@@ -5889,11 +6074,40 @@ function editarPago(i) {
     if (subSelect) subSelect.value = p.submedio || "";
   }
 
-  const { form } = $pagosEls();
-  if (form) {
-    form.dataset.editIndex = i;
+  // Modo edición + botón Cancelar unificado
+  form.dataset.editIndex = i;
+
+  if (typeof ensureCancelBtn === 'function') {
+    ensureCancelBtn(form, {
+      id: 'cancel-pago',
+      submitNormalText: '💾 Registrar Pago',
+      submitEditText  : 'Actualizar Pago',
+      onCancel        : () => {
+        try { form.reset(); } catch {}
+        delete form.dataset.editIndex;
+        // Ocultar submedios y re-evaluar medio
+        if (subCont) subCont.style.display = "none";
+        try { toggleMedioPorMonto?.(); } catch {}
+      }
+    });
+    // Estilo moradito oscuro como los demás botones
+    const btnCancel = form.querySelector('#cancel-pago');
+    if (btnCancel) btnCancel.classList.add('btn', 'btn-secundario', 'btn-cancel-mini');
+  } else {
     const btn = form.querySelector("button[type='submit']");
     if (btn) btn.textContent = "Actualizar Pago";
+  }
+
+  // Scroll + foco en Tipo de Bill (como pediste para Pagos)
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const focusBill = () => {
+    try { bill.focus({ preventScroll: true }); } catch { bill.focus?.(); }
+  };
+  if (typeof focusAfterPaint === 'function') {
+    focusAfterPaint(bill, 150);
+  } else {
+    requestAnimationFrame(() => requestAnimationFrame(focusBill));
   }
 }
 

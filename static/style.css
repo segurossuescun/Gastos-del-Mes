@@ -2544,4 +2544,98 @@ html, body { margin:0; padding:0; overflow-x:hidden; }
   transition: opacity .2s ease;
 }
 #form-registro .registro-tip.show { opacity: .95; }
+/* Botón mini cancelar (discreto pero visible) */
+/* === CANCELAR — Estilo unificado, nítido y centrado en TODAS las vistas === */
+.btn-cancel-mini{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 2px solid #7c3aed;      /* borde morado */
+  background: #fff;                /* fondo blanco = legibilidad top */
+  color: #553071 !important;       /* morado oscuro de marca */
+  font: 700 15px/1.1 "Boogaloo", cursive;
+  letter-spacing: .1px;
+  text-shadow: none;
+  box-shadow: 0 6px 16px rgba(124,58,237,.18);
+  cursor: pointer;
+}
+.btn-cancel-mini:hover{
+  background: #7c3aed;
+  color: #fff !important;
+  border-color: #7c3aed;
+}
+.btn-cancel-mini:active{ transform: translateY(1px); }
+.btn-cancel-mini:focus-visible{
+  outline: 3px solid rgba(124,58,237,.35);
+  outline-offset: 2px;
+}
 
+/* Centrado bajo el botón principal en las 4 vistas */
+#form-ingresos .btn-cancel-mini,
+#form-egresos .btn-cancel-mini,
+#form-bills    .btn-cancel-mini,
+#form-pagos    .btn-cancel-mini{
+  display: block;
+  margin: 8px auto 0;   /* 👈 centrado */
+  width: fit-content;
+}
+
+/* (Por si acaso) centra también el submit en todas las vistas */
+#form-ingresos button[type="submit"],
+#form-egresos button[type="submit"],
+#form-bills    button[type="submit"],
+#form-pagos    button[type="submit"]{
+  display: block;
+  margin: 0 auto;
+}
+/* === CANCELAR — estilo único para las 4 vistas (override final) === */
+#cancel-ingreso,
+#cancel-egreso,
+#cancel-bill,
+#cancel-pago,
+.btn-cancel-mini{
+  display: block;
+  margin: 8px auto 0;                /* centrado bajo el submit */
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 12px;
+  font-family: 'Boogaloo', cursive;
+  font-size: 1.05rem;
+  font-weight: 600;                   /* menos “negrita”: más legible */
+  letter-spacing: .2px;
+  color: #fff !important;
+  background: linear-gradient(90deg, #9a27f7, #6664ff);
+  box-shadow: 0 6px 14px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.35);
+  text-shadow: none !important;       /* evita el look borrosito */
+  -webkit-text-stroke: 0 !important;  /* nada de borde al texto */
+  font-synthesis-weight: none;        /* no “faux bold” */
+  cursor: pointer;
+}
+
+#cancel-ingreso:hover,
+#cancel-egreso:hover,
+#cancel-bill:hover,
+#cancel-pago:hover,
+.btn-cancel-mini:hover{
+  filter: brightness(1.06);
+}
+
+#cancel-ingreso:active,
+#cancel-egreso:active,
+#cancel-bill:active,
+#cancel-pago:active,
+.btn-cancel-mini:active{
+  transform: translateY(1px);
+}
+
+/* Submit centrado en todas las vistas (por si alguna lo había movido) */
+#form-ingresos  button[type="submit"],
+#form-egresos   button[type="submit"],
+#form-bills     button[type="submit"],
+#form-pagos     button[type="submit"]{
+  display: block;
+  margin: 12px auto 4px;             /* centrado y con aire arriba */
+  min-width: 170px;
+}
